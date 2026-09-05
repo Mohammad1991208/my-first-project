@@ -1,45 +1,94 @@
 import os
-import sqlite3
 from flask import Flask, render_template_string, request, jsonify
 from google import genai
 
-# قراءة مفتاح الـ API من متغيرات البيئة
-API_KEY = os.environ.get("GEMINI_API_KEY")
-DB_FILE = "digital_store_chat.db"
+app = Flask(__name__)
 
-# --- 1. كتالوج المنتجات الرقمية ---
-PRODUCTS_CATALOG = [
-    {
-        "id": "PROD-01",
-        "title": "كتاب احتراف التسويق الرقمي (PDF)",
-        "category": "كتّب إلكترونية",
-        "price": "$19",
-        "description": "دليل شامل يتضمن أسرار الحملات الإعلانية واستراتيجيات النمو وتنمية الأرباح.",
-        "link": "https://your-store.com/checkout/marketing-ebook"
-    },
-    {
-        "id": "PROD-02",
-        "title": "دورة أساسيات الذكاء الاصطناعي (فيديو)",
-        "category": "دورات تدريبية",
-        "price": "$49",
-        "description": "دورة عمليّة تشرح كيفية بناء أدوات وتطبيقات بالذكاء الاصطناعي من الصفر.",
-        "link": "https://your-store.com/checkout/ai-course"
-    }
-]
+# System instruction for Sarah
+SYSTEM_INSTRUCTION = "أنتِ سارة، وكيلة مبيعات رقمية محترفة وودودة. تجيبين على استفسارات العملاء بأسلوب راقٍ ومساعد."
 
-# --- 2. إدارة قاعدة البيانات ---
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            role TEXT,
-            content TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+# Initialize Gemini Client
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مساعد المبيعات - سارة</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .chat-container { width: 100%; max-width: 500px; background: #1e293b; border-radius: 12px; padding: 20px; }
+        h2 { text-align: center; color: #38bdf8; }
+        .chat-box { height: 350px; overflow-y: auto; background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 8px 12px; border-radius: 8px; max-width: 80%; }
+        .user { background: #0284c7; align-self: flex-start; }
+        .bot { background: #334155; align-self: flex-end; }
+        .input-box { display: flex; gap: 8px; }
+        input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; }
+        button { padding: 10px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h2>🛍️ مساعد المبيعات الرقمي (سارة)</h2>
+        <div class="chat-box" id="chatBox">
+            <div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟</div>
+        </div>
+        <div class="input-box">
+            <input type="text" id="userInput" placeholder="اسأل سارة..." onkeydown="if(event.key==='Enter') sendMsg()">
+            <button onclick="sendMsg()">إرسال</button>
+        </div>
+    </div>
+    <script>
+        async function sendMsg() {
+            const input = document.getElementById('userInput');
+            const chatBox = document.getElementById('chatBox');
+            const text = input.value.trim();
+            if(!text) return;
+            chatBox.innerHTML += `<div class="msg user">أنت: ${text}</div>`;
+            input.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                chatBox.innerHTML += `<div class="msg bot">${data.reply || data.error}</div>`;
+            } catch(e) {
+                chatBox.innerHTML += `<div class="msg bot" style="color: #ef4444;">خطأ في الاتصال</div>`;
+            }
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_message = request.json.get('message', '')
+    if not user_message:
+        return jsonify({'error': 'الرسالة فارغة'}), 400
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"{SYSTEM_INSTRUCTION}\n\nرسالة العميل: {user_message}"
         )
-    ''')
-    conn.commit()
+        return jsonify({'reply': response.text})
+    except Exception as e:
+        return jsonify({'error': f"خطأ: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
     conn.close()
 
 def save_message(role, content):
@@ -107,119 +156,4 @@ def clear_chat_history():
     clear_db()
     return jsonify({'status': 'cleared'})
 
-@app.route('/ask', methods=['POST'])
-def ask():
-    user_query = request.json.get('query', '')
-    save_message('user', user_query)
-    
-    history = get_history()
-    prompt = build_sales_agent_prompt(user_query, history)
-
-    try:
-        client = genai.Client(api_key=API_KEY.strip() if API_KEY else "")
-        response = client.models.generate_content(
-            model = genai.GenerativeModel('gemini-2.5-flash')
-
-            contents=prompt
-        )
-        reply_text = response.text
-        save_message('bot', reply_text)
-        return jsonify({'reply': reply_text})
-    except Exception as e:
-        error_msg = f"خطأ في الاتصال: {e}"
-        save_message('bot', error_msg)
-        return jsonify({'reply': error_msg})
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>المتجر الرقمي</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <style>
-        body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 15px; }
-        .container { max-width: 650px; margin: auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 15px; border-radius: 10px; margin-bottom: 12px; }
-        .header h2 { margin: 0; font-size: 18px; color: #38bdf8; }
-        .clear-btn { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
-        .chat-box { background: #1e293b; height: 380px; overflow-y: auto; padding: 15px; border-radius: 10px; margin-bottom: 12px; }
-        .msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
-        .user { background: #0284c7; text-align: right; }
-        .bot { background: #334155; text-align: right; }
-        .bot a { color: #38bdf8; font-weight: bold; }
-        .input-area { display: flex; gap: 8px; }
-        input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; }
-        button.send-btn { padding: 12px 20px; border: none; background: #10b981; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h2>🛍️ مساعد المبيعات الرقمي</h2>
-            <button class="clear-btn" onclick="clearHistory()">مسح السجل</button>
-        </div>
-        <div class="chat-box" id="chatBox"></div>
-        <div class="input-area">
-            <input type="text" id="userInput" placeholder="اسأل عن المنتجات..." onkeypress="if(event.key==='Enter') sendMsg()">
-            <button class="send-btn" id="sendBtn" onclick="sendMsg()">إرسال</button>
-        </div>
-    </div>
-    <script>
-        window.onload = async function() {
-            let res = await fetch('/get_history');
-            let history = await res.json();
-            let box = document.getElementById('chatBox');
-            box.innerHTML = '';
-            if(history.length === 0) {
-                box.innerHTML = `<div class="msg bot"><b>سارة:</b> أهلاً بك! كيف يمكنني مساعدتك اليوم؟</div>`;
-            } else {
-                history.forEach(item => {
-                    let parsed = typeof marked !== 'undefined' ? marked.parse(item.content) : item.content;
-                    box.innerHTML += `<div class="msg ${item.role === 'user' ? 'user' : 'bot'}"><b>${item.role === 'user' ? 'أنت' : 'سارة'}:</b><br>${parsed}</div>`;
-                });
-            }
-            box.scrollTop = box.scrollHeight;
-        };
-
-        async function sendMsg() {
-            let input = document.getElementById('userInput');
-            let box = document.getElementById('chatBox');
-            let text = input.value.trim();
-            if(!text) return;
-
-            box.innerHTML += `<div class="msg user"><b>أنت:</b> ${text}</div>`;
-            input.value = '';
-            box.scrollTop = box.scrollHeight;
-
-            try {
-                let res = await fetch('/ask', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({query: text})
-                });
-                let data = await res.json();
-                let parsedReply = typeof marked !== 'undefined' ? marked.parse(data.reply) : data.reply;
-                box.innerHTML += `<div class="msg bot"><b>سارة:</b><br>${parsedReply}</div>`;
-            } catch (e) {
-                box.innerHTML += `<div class="msg bot" style="color: #ef4444;"><b>خطأ:</b> تعذر الاتصال</div>`;
-            }
-            box.scrollTop = box.scrollHeight;
-        }
-
-        async function clearHistory() {
-            if(confirm("مسح السجل؟")) {
-                await fetch('/clear_history', { method: 'POST' });
-                location.reload();
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-
-if __name__ == '__main__':
-    init_db()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+@app.route
