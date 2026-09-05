@@ -118,7 +118,8 @@ def ask():
     try:
         client = genai.Client(api_key=API_KEY.strip() if API_KEY else "")
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model = genai.GenerativeModel('gemini-2.5-flash')
+
             contents=prompt
         )
         reply_text = response.text
