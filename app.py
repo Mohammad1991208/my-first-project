@@ -79,7 +79,7 @@ def chat():
         return jsonify({'error': 'الرسالة فارغة'}), 400
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=f"{SYSTEM_INSTRUCTION}\n\nرسالة العميل: {user_message}"
         )
         return jsonify({'reply': response.text})
