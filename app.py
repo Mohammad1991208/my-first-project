@@ -4,15 +4,16 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# تعليمات النظام والكتالوج المخصص لـ سارة
+# تعليمات النظام والكتالوج المخصص لـ سارة مع توجيه الدفع عبر محفظة أورنج
 SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
 مهامك:
 1. الرد على استفسارات العملاء بناءً على الكتالوج والمنتجات والدورات المتاحة.
 2. مساعدة العملاء في اختيار المنتج أو الدورة المناسبة.
-3. توجيه العميل لرابط الشراء عند رغبته في الطلب.
+3. عندما يبدي العميل رغبته بالشراء أو طلب الدفع، قم بتوجيهه لإتمام الدفع عن طريق التحويل الفوري إلى محفظة أورنج موني على الرقم التالي: 00962798309654، واطلب منه إرسال صورة إيصال التحويل لتأكيد الطلب.
 """
 
+# المتغيرات الأساسية
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
@@ -31,11 +32,10 @@ def send_telegram_message(chat_id, text):
         print(f"Error sending telegram message: {e}")
 
 def get_gemini_response(user_text):
-    """الاتصال المباشر بـ Gemini مع دعم النموذج الاحتياطي ومهلة وقت أكبر"""
+    """الاتصال المباشر بـ Gemini مع دعم النماذج الاحتياطية"""
     if not GEMINI_API_KEY:
         return "خطأ: مفتاح GEMINI_API_KEY غير مضاف في Variables."
     
-    # قائمة النماذج المتاحة للتجربة بالتوالي
     models_to_try = ["gemini-3.6-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
     
     payload = {
