@@ -47,27 +47,165 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مساعد المبيعات - سارة</title>
+    <!-- Library for rendering Markdown formatting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .chat-container { width: 100%; max-width: 500px; background: #1e293b; border-radius: 12px; padding: 20px; }
-        h2 { text-align: center; color: #38bdf8; }
-        .chat-box { height: 350px; overflow-y: auto; background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .msg { padding: 8px 12px; border-radius: 8px; max-width: 80%; }
-        .user { background: #0284c7; align-self: flex-start; }
-        .bot { background: #334155; align-self: flex-end; }
-        .input-box { display: flex; gap: 8px; }
-        input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; }
-        button { padding: 10px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+            color: #f8fafc; 
+            margin: 0; 
+            padding: 12px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+        }
+        .chat-container { 
+            width: 100%; 
+            max-width: 480px; 
+            height: 90vh; 
+            max-height: 680px; 
+            background: #1e293b; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            border: 1px solid #334155; 
+        }
+        .chat-header { 
+            padding: 16px; 
+            background: #0f172a; 
+            border-bottom: 1px solid #334155; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+        }
+        .avatar { 
+            width: 42px; 
+            height: 42px; 
+            background: linear-gradient(135deg, #38bdf8, #0284c7); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 20px; 
+            box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3); 
+        }
+        .header-info h2 { margin: 0; font-size: 1.1rem; color: #38bdf8; }
+        .header-info p { margin: 2px 0 0 0; font-size: 0.8rem; color: #94a3b8; }
+        .chat-box { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 16px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+            background: #0f172a; 
+            scroll-behavior: smooth; 
+        }
+        .msg { 
+            padding: 12px 16px; 
+            border-radius: 14px; 
+            max-width: 85%; 
+            line-height: 1.5; 
+            font-size: 0.95rem; 
+            word-break: break-word; 
+            animation: fadeIn 0.3s ease-in-out; 
+        }
+        .msg p { margin: 0 0 8px 0; }
+        .msg p:last-child { margin-bottom: 0; }
+        .msg ul, .msg ol { margin: 4px 0; padding-right: 20px; }
+        .user { 
+            background: linear-gradient(135deg, #0284c7, #2563eb); 
+            color: #ffffff; 
+            align-self: flex-start; 
+            border-bottom-right-radius: 4px; 
+            box-shadow: 0 2px 5px rgba(2, 132, 199, 0.2); 
+        }
+        .bot { 
+            background: #334155; 
+            color: #f8fafc; 
+            align-self: flex-end; 
+            border-bottom-left-radius: 4px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+        }
+        .typing-indicator { 
+            display: none; 
+            align-self: flex-end; 
+            background: #334155; 
+            padding: 10px 16px; 
+            border-radius: 14px; 
+            border-bottom-left-radius: 4px; 
+        }
+        .dots { display: flex; gap: 4px; align-items: center; }
+        .dot { 
+            width: 8px; 
+            height: 8px; 
+            background: #94a3b8; 
+            border-radius: 50%; 
+            animation: pulse 1.4s infinite ease-in-out; 
+        }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+        .input-container { 
+            padding: 12px; 
+            background: #1e293b; 
+            border-top: 1px solid #334155; 
+            display: flex; 
+            gap: 8px; 
+        }
+        input { 
+            flex: 1; 
+            padding: 12px 14px; 
+            border-radius: 10px; 
+            border: 1px solid #475569; 
+            background: #0f172a; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            outline: none; 
+            transition: border-color 0.2s; 
+        }
+        input:focus { border-color: #38bdf8; }
+        button { 
+            padding: 12px 20px; 
+            background: linear-gradient(135deg, #10b981, #059669); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 0.95rem; 
+            transition: transform 0.1s, background 0.2s; 
+        }
+        button:active { transform: scale(0.96); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
     <div class="chat-container">
-        <h2>🛍️ مساعد المبيعات الرقمي (سارة)</h2>
-        <div class="chat-box" id="chatBox">
-            <div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟</div>
+        <div class="chat-header">
+            <div class="avatar">👩💼</div>
+            <div class="header-info">
+                <h2>سارة - مساعد المبيعات</h2>
+                <p>متصلة الآن لمساعدتك</p>
+            </div>
         </div>
-        <div class="input-box">
-            <input type="text" id="userInput" placeholder="اسأل سارة..." onkeydown="if(event.key==='Enter') sendMsg()">
+        <div class="chat-box" id="chatBox">
+            <div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊</div>
+            <div class="typing-indicator" id="typingIndicator">
+                <div class="dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </div>
+        </div>
+        <div class="input-container">
+            <input type="text" id="userInput" placeholder="اكتب سؤالك هنا..." onkeydown="if(event.key==='Enter') sendMsg()">
             <button onclick="sendMsg()">إرسال</button>
         </div>
     </div>
@@ -75,11 +213,20 @@ HTML_TEMPLATE = """
         async function sendMsg() {
             const input = document.getElementById('userInput');
             const chatBox = document.getElementById('chatBox');
+            const typingIndicator = document.getElementById('typingIndicator');
             const text = input.value.trim();
             if(!text) return;
-            chatBox.innerHTML += `<div class="msg user">أنت: ${text}</div>`;
+
+            // إدراج رسالة العميل
+            const userDiv = document.createElement('div');
+            userDiv.className = 'msg user';
+            userDiv.innerText = text;
+            chatBox.insertBefore(userDiv, typingIndicator);
+
             input.value = '';
+            typingIndicator.style.display = 'block';
             chatBox.scrollTop = chatBox.scrollHeight;
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
@@ -87,10 +234,21 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({ message: text })
                 });
                 const data = await res.json();
-                chatBox.innerHTML += `<div class="msg bot">${data.reply || data.error}</div>`;
+                
+                // إدراج رد سارة مع تنسيق Markdown
+                const botDiv = document.createElement('div');
+                botDiv.className = 'msg bot';
+                botDiv.innerHTML = marked.parse(data.reply || data.error);
+                chatBox.insertBefore(botDiv, typingIndicator);
             } catch(e) {
-                chatBox.innerHTML += `<div class="msg bot" style="color: #ef4444;">خطأ في الاتصال</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'msg bot';
+                errorDiv.style.color = '#ef4444';
+                errorDiv.innerText = 'حدث خطأ في الاتصال، يرجى المحاولة مرة أخرى.';
+                chatBox.insertBefore(errorDiv, typingIndicator);
             }
+
+            typingIndicator.style.display = 'none';
             chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
