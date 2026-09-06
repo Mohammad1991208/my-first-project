@@ -1,6 +1,10 @@
 import os
+import asyncio
+import threading
 from flask import Flask, render_template_string, request, jsonify
 from google import genai
+from telegram import Update
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
 app = Flask(__name__)
 
@@ -40,6 +44,55 @@ SYSTEM_INSTRUCTION = """
 # Initialize Gemini Client
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
+# ----------------- TELEGRAM BOT -----------------
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+telegram_user_histories = {}
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    telegram_user_histories[chat_id] = []
+    await update.message.reply_text("أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
+
+async def handle_telegram_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_text = update.message.text
+
+    if chat_id not in telegram_user_histories:
+        telegram_user_histories[chat_id] = []
+
+    telegram_user_histories[chat_id].append({"role": "user", "parts": [{"text": user_text}]})
+
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=telegram_user_histories[chat_id],
+            config={'system_instruction': SYSTEM_INSTRUCTION}
+        )
+        reply_text = response.text
+        telegram_user_histories[chat_id].append({"role": "model", "parts": [{"text": reply_text}]})
+        await update.message.reply_text(reply_text)
+    except Exception as e:
+        print(f"Telegram Bot Error: {e}")
+        await update.message.reply_text("عذراً، حدث خطأ مؤقت. يرجى المحاولة لاحقاً.")
+
+def start_bot_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_telegram_message))
+    
+    print("Telegram bot starting...")
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
+    loop.run_until_complete(application.updater.start_polling(drop_pending_updates=True))
+    loop.run_forever()
+
+if TELEGRAM_TOKEN:
+    threading.Thread(target=start_bot_loop, daemon=True).start()
+
+# ----------------- WEB APP -----------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -82,11 +135,7 @@ HTML_TEMPLATE = """
             align-items: center; 
             justify-content: space-between;
         }
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
         .avatar { 
             width: 42px; 
             height: 42px; 
@@ -228,7 +277,6 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <script>
-        // حفظ سجل المحادثة في مصفوفة
         let chatHistory = [];
 
         async function sendMsg() {
@@ -238,7 +286,6 @@ HTML_TEMPLATE = """
             const text = input.value.trim();
             if(!text) return;
 
-            // إدراج رسالة العميل
             const userDiv = document.createElement('div');
             userDiv.className = 'msg user';
             userDiv.innerText = text;
@@ -248,7 +295,6 @@ HTML_TEMPLATE = """
             typingIndicator.style.display = 'block';
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            // إضافة رسالة المستخدم للسجل
             chatHistory.push({ role: "user", parts: [{ text: text }] });
 
             try {
@@ -259,14 +305,12 @@ HTML_TEMPLATE = """
                 });
                 const data = await res.json();
                 
-                // إدراج رد سارة مع تنسيق Markdown
                 const replyText = data.reply || data.error;
                 const botDiv = document.createElement('div');
                 botDiv.className = 'msg bot';
                 botDiv.innerHTML = marked.parse(replyText);
                 chatBox.insertBefore(botDiv, typingIndicator);
 
-                // إضافة رد البوت للسجل
                 if (data.reply) {
                     chatHistory.push({ role: "model", parts: [{ text: data.reply }] });
                 }
@@ -304,7 +348,6 @@ def chat():
     if not history:
         return jsonify({'error': 'الرسالة فارغة'}), 400
     try:
-        # إرسال السجل الكامل مع تعليمات النظام
         response = client.models.generate_content(
             model='gemini-3.6-flash',
             contents=history,
