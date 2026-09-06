@@ -1,13 +1,12 @@
 import os
 import asyncio
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify
 from google import genai
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+import requests
 
 app = Flask(__name__)
 
-# تعليمات النظام وقاعدة بيانات المبيعات المخصصة لسارة
+# تعليمات النظام لـ سارة
 SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
 مهامك:
@@ -16,62 +15,61 @@ SYSTEM_INSTRUCTION = """
 3. توجيه العميل لرابط الشراء عند رغبته في الطلب.
 """
 
-# إعداد العميل لـ Gemini API
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key) if api_key else None
+# جلب المتغيرات
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# إعداد تطبيق تلجرام
-telegram_token = os.environ.get("TELEGRAM_TOKEN")
-tg_app = None
+# إعداد عميل Gemini
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-if telegram_token:
-    tg_app = ApplicationBuilder().token(telegram_token).build()
-
-async def start_command(update, context):
-    await update.message.reply_text("أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
-
-async def handle_message(update, context):
-    user_text = update.message.text
+def send_telegram_message(chat_id, text):
+    """إرسال رد إلى مستخدم تلجرام مباشرة عبر HTTP API"""
+    if not TELEGRAM_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
     try:
-        if not client:
-            await update.message.reply_text("عذراً، مفتاح GEMINI_API_KEY غير متهيئة بشكل صحيح.")
-            return
-
-        # استدعى النموذج الصحيح gemini-1.5-flash
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=user_text,
-            config={"system_instruction": SYSTEM_INSTRUCTION}
-        )
-        reply_text = response.text if response.text else "عذراً، لم أتمكن من معالجة الطلب."
-        await update.message.reply_text(reply_text)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"Error in handle_message: {e}")
-        await update.message.reply_text("عذراً، حدث خطأ مؤقت. يرجى المحاولة لاحقاً.")
-
-# إضافة معالجات الأوامر والرسائل
-if tg_app:
-    tg_app.add_handler(CommandHandler("start", start_command))
-    tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        print(f"Error sending message: {e}")
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent is running!"
+    return "Sarah Sales Agent is active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
-    if not tg_app:
-        return jsonify({"status": "error", "message": "Telegram app not configured"}), 500
+    data = request.get_json(force=True)
     
-    update_data = request.get_json(force=True)
-    update = Update.de_json(update_data, tg_app.bot)
-    
-    # تشغيل معالجة التلجرام بشكل غير متزامن
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(tg_app.process_update(update))
-    loop.close()
-    
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        user_text = data["message"].get("text", "")
+
+        # التعامل مع أمر البداية
+        if user_text == "/start":
+            send_telegram_message(chat_id, "أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
+            return jsonify({"status": "ok"})
+
+        # معالجة النصوص عبر Gemini
+        if client:
+            try:
+                response = client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=user_text,
+                    config={"system_instruction": SYSTEM_INSTRUCTION}
+                )
+                reply_text = response.text if response.text else "عذراً، لم أتمكن من إعداد الإجابة."
+            except Exception as e:
+                print(f"Gemini API Error: {e}")
+                reply_text = "عذراً، حدث خطأ أثناء معالجة الطلب."
+        else:
+            reply_text = "خطأ: لم يتم ضبط مفتاح Gemini API."
+
+        send_telegram_message(chat_id, reply_text)
+
     return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
