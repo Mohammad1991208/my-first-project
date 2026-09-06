@@ -1,3 +1,5 @@
 flask
 google-genai
 gunicorn
+python-telegram-bot
+
