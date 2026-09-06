@@ -1,29 +1,26 @@
 import os
 import requests
-from Flask import Flask, request, jsonify
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# تعليمات النظام والكتالوج المحدث المخصص لـ سارة
+# تعليمات النظام والكتالوج المحدث لـ سارة
 SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
 مهامك:
-1. الرد على استفسارات العملاء بناءً على الكتالوج والمنتجات المتاحة لدينا حالياً.
-2. مساعدة العملاء في اختيار المنتج المناسب.
-3. عندما يبدي العميل رغبته بالشراء، قم بتوجيهه لإتمام الدفع عن طريق التحويل الفوري إلى محفظة أورنج موني على الرقم التالي: 00962798309654، واطلب منه إرسال صورة إيصال التحويل لتأكيد الطلب وإرسال الكتاب له.
-
-الكتالوج الحالي:
-- كتاب: "الذكاء الاصطناعي من الصفر إلى الاحتراف" 🤖📚
-  - الوصف: دليل شامل ومبسط لفهم أساسيات الذكاء الاصطناعي واستخدام أدواته الحديثة في حياتك وعملك.
-  - السعر: 10 دنانير أردنية.
+1. الرد على استفسارات العملاء ومساعدتهم في اختيار المنتج المناسب.
+2. الكتالوج الحالي المتاح للبيع:
+   - كتاب: "دليل المبتدئ إلى الذكاء الاصطناعي" 🤖📚
+   - الوصف: دليل مصغر وعملي لفهم أساسيات الذكاء الاصطناعي وكيفية استخدام أدواته الذكية لمضاعفة إنتاجيتك في العمل والحياة.
+   - السعر: 10 دنانير أردنية.
+3. عندما يبدي العميل رغبته بالشراء، وجهه حصراً لدفع القيمة عبر التحويل الفوري إلى محفظة أورنج موني على الرقم التالي: 00962798309654، واطلب منه إرسال كلمة "تم التحويل" لإرسال الكتاب له فوراً.
 """
 
-# المتغيرات الأساسية
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 def send_telegram_message(chat_id, text):
-    """إرسال رد إلى مستخدم تلجرام"""
+    """إرسال رد نصي إلى مستخدم تلجرام"""
     if not TELEGRAM_TOKEN:
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -36,8 +33,23 @@ def send_telegram_message(chat_id, text):
     except Exception as e:
         print(f"Error sending telegram message: {e}")
 
+def send_telegram_document(chat_id, document_url, caption):
+    """إرسال ملف الكتاب تلقائياً إلى مستخدم تلجرام"""
+    if not TELEGRAM_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
+    payload = {
+        "chat_id": chat_id,
+        "document": document_url,
+        "caption": caption
+    }
+    try:
+        requests.post(url, json=payload, timeout=15)
+    except Exception as e:
+        print(f"Error sending telegram document: {e}")
+
 def get_gemini_response(user_text):
-    """الاتصال المباشر بـ Gemini مع دعم النماذج الاحتياطية"""
+    """الاتصال بـ Gemini للرد على استفسارات العملاء"""
     if not GEMINI_API_KEY:
         return "خطأ: مفتاح GEMINI_API_KEY غير مضاف في Variables."
     
@@ -87,9 +99,16 @@ def telegram_webhook():
         user_text = data["message"].get("text", "")
 
         if user_text == "/start":
-            send_telegram_message(chat_id, "أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
+            send_telegram_message(chat_id, "أهلاً بك! أنا سارة، وكيلة المبيعات. كيف يمكنني مساعدتك اليوم؟ 😊")
             return jsonify({"status": "ok"})
 
+        # التحقق إذا كتب العميل كلمة التأكيد لإرسال الكتاب آلياً
+        if "تم التحويل" in user_text or "إيصال" in user_text:
+            book_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide.pdf"
+            send_telegram_document(chat_id, book_url, "شكراً لتأكيد الدفع! تفضل كتاب 'دليل المبتدئ إلى الذكاء الاصطناعي'. نتمنى لك قراءة ممتعة ومفيدة 🤖📚")
+            return jsonify({"status": "ok"})
+
+        # الرد الطبيعي عبر ذكاء سارة
         reply_text = get_gemini_response(user_text)
         send_telegram_message(chat_id, reply_text)
 
