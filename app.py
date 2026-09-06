@@ -1,10 +1,9 @@
 import os
 import asyncio
-import threading
 from flask import Flask, render_template_string, request, jsonify
 from google import genai
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
 app = Flask(__name__)
 
@@ -44,18 +43,28 @@ SYSTEM_INSTRUCTION = """
 # Initialize Gemini Client
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# ----------------- TELEGRAM BOT -----------------
+# ----------------- TELEGRAM BOT WEBHOOK -----------------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 telegram_user_histories = {}
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    telegram_user_histories[chat_id] = []
-    await update.message.reply_text("أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
+async def process_telegram_update(data):
+    if not TELEGRAM_TOKEN:
+        return
+    
+    ptb_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    await ptb_app.initialize()
 
-async def handle_telegram_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    update = Update.de_json(data, ptb_app.bot)
+    if not update or not update.message or not update.message.text:
+        return
+
     chat_id = update.effective_chat.id
     user_text = update.message.text
+
+    if user_text.startswith('/start'):
+        telegram_user_histories[chat_id] = []
+        await ptb_app.bot.send_message(chat_id=chat_id, text="أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
+        return
 
     if chat_id not in telegram_user_histories:
         telegram_user_histories[chat_id] = []
@@ -64,33 +73,22 @@ async def handle_telegram_message(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=telegram_user_histories[chat_id],
             config={'system_instruction': SYSTEM_INSTRUCTION}
         )
         reply_text = response.text
         telegram_user_histories[chat_id].append({"role": "model", "parts": [{"text": reply_text}]})
-        await update.message.reply_text(reply_text)
+        await ptb_app.bot.send_message(chat_id=chat_id, text=reply_text)
     except Exception as e:
         print(f"Telegram Bot Error: {e}")
-        await update.message.reply_text("عذراً، حدث خطأ مؤقت. يرجى المحاولة لاحقاً.")
+        await ptb_app.bot.send_message(chat_id=chat_id, text="عذراً، حدث خطأ مؤقت. يرجى المحاولة لاحقاً.")
 
-def start_bot_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_telegram_message))
-    
-    print("Telegram bot starting...")
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    loop.run_until_complete(application.updater.start_polling(drop_pending_updates=True))
-    loop.run_forever()
-
-if TELEGRAM_TOKEN:
-    threading.Thread(target=start_bot_loop, daemon=True).start()
+@app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    data = request.get_json(force=True)
+    asyncio.run(process_telegram_update(data))
+    return 'OK', 200
 
 # ----------------- WEB APP -----------------
 HTML_TEMPLATE = """
@@ -328,7 +326,7 @@ HTML_TEMPLATE = """
 
         function clearHistory() {
             chatHistory = [];
-            const chatBox = document.getElementById('chatBox');
+            const chatBox = document.createElement('div');
             const typingIndicator = document.getElementById('typingIndicator');
             chatBox.innerHTML = '<div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊</div>';
             chatBox.appendChild(typingIndicator);
@@ -349,7 +347,7 @@ def chat():
         return jsonify({'error': 'الرسالة فارغة'}), 400
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=history,
             config={'system_instruction': SYSTEM_INSTRUCTION}
         )
