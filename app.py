@@ -13,7 +13,6 @@ SYSTEM_INSTRUCTION = """
 3. توجيه العميل لرابط الشراء عند رغبته في الطلب.
 """
 
-# المتغيرات الأساسية
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
@@ -32,11 +31,12 @@ def send_telegram_message(chat_id, text):
         print(f"Error sending telegram message: {e}")
 
 def get_gemini_response(user_text):
-    """الترابط المباشر مع API الخاص بـ Gemini باستخدام النموذج المطلوب gemini-3.6-flash"""
+    """الاتصال المباشر بـ Gemini مع دعم النموذج الاحتياطي ومهلة وقت أكبر"""
     if not GEMINI_API_KEY:
         return "خطأ: مفتاح GEMINI_API_KEY غير مضاف في Variables."
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
+    # قائمة النماذج المتاحة للتجربة بالتوالي
+    models_to_try = ["gemini-3.6-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
     
     payload = {
         "system_instruction": {
@@ -49,24 +49,25 @@ def get_gemini_response(user_text):
         ]
     }
     
-    try:
-        res = requests.post(url, json=payload, timeout=15)
-        res_json = res.json()
-        
-        if res.status_code == 200:
-            candidates = res_json.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    return parts[0].get("text", "لم يتم توليد نص.")
-            return "عذراً، لم أتمكن من إعداد الإجابة."
-        else:
-            error_msg = res_json.get("error", {}).get("message", "خطأ غير معروف")
-            print(f"Gemini API Error: {res.status_code} - {error_msg}")
-            return f"عذراً، حدث خطأ في النظام: {error_msg}"
-    except Exception as e:
-        print(f"Exception calling Gemini: {e}")
-        return "عذراً، حدث خطأ أثناء الاتصال بالخادم."
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            res = requests.post(url, json=payload, timeout=25)
+            res_json = res.json()
+            
+            if res.status_code == 200:
+                candidates = res_json.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "لم يتم توليد نص.")
+            else:
+                error_msg = res_json.get("error", {}).get("message", "خطأ غير معروف")
+                print(f"Model {model_name} failed: {error_msg}")
+        except Exception as e:
+            print(f"Exception calling model {model_name}: {e}")
+            
+    return "عذراً، الخادم مشغول حالياً. يرجى إعادة محاولة إرسال الرسالة."
 
 @app.route("/", methods=["GET"])
 def index():
@@ -80,12 +81,10 @@ def telegram_webhook():
         chat_id = data["message"]["chat"]["id"]
         user_text = data["message"].get("text", "")
 
-        # الأمر الترحيبي
         if user_text == "/start":
             send_telegram_message(chat_id, "أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
             return jsonify({"status": "ok"})
 
-        # التفاعل مع الذكاء الاصطناعي
         reply_text = get_gemini_response(user_text)
         send_telegram_message(chat_id, reply_text)
 
