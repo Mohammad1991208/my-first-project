@@ -73,7 +73,7 @@ async def process_telegram_update(data):
 
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=telegram_user_histories[chat_id],
             config={'system_instruction': SYSTEM_INSTRUCTION}
         )
