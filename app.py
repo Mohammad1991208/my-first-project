@@ -32,11 +32,11 @@ def send_telegram_message(chat_id, text):
         print(f"Error sending telegram message: {e}")
 
 def get_gemini_response(user_text):
-    """الترابط المباشر مع API الخاص بـ Gemini باستخدام النموذج المعتمد gemini-2.5-flash"""
+    """الترابط المباشر مع API الخاص بـ Gemini باستخدام النموذج المطلوب gemini-3.6-flash"""
     if not GEMINI_API_KEY:
         return "خطأ: مفتاح GEMINI_API_KEY غير مضاف في Variables."
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "system_instruction": {
