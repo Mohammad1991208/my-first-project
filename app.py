@@ -47,7 +47,6 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مساعد المبيعات - سارة</title>
-    <!-- Library for rendering Markdown formatting -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -81,7 +80,12 @@ HTML_TEMPLATE = """
             border-bottom: 1px solid #334155; 
             display: flex; 
             align-items: center; 
-            gap: 12px; 
+            justify-content: space-between;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         .avatar { 
             width: 42px; 
@@ -96,6 +100,17 @@ HTML_TEMPLATE = """
         }
         .header-info h2 { margin: 0; font-size: 1.1rem; color: #38bdf8; }
         .header-info p { margin: 2px 0 0 0; font-size: 0.8rem; color: #94a3b8; }
+        .clear-btn {
+            background: transparent;
+            border: 1px solid #475569;
+            color: #94a3b8;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+        .clear-btn:hover { background: #334155; color: #f8fafc; }
         .chat-box { 
             flex: 1; 
             overflow-y: auto; 
@@ -169,7 +184,7 @@ HTML_TEMPLATE = """
             transition: border-color 0.2s; 
         }
         input:focus { border-color: #38bdf8; }
-        button { 
+        button.send-btn { 
             padding: 12px 20px; 
             background: linear-gradient(135deg, #10b981, #059669); 
             color: white; 
@@ -178,9 +193,9 @@ HTML_TEMPLATE = """
             cursor: pointer; 
             font-weight: bold; 
             font-size: 0.95rem; 
-            transition: transform 0.1s, background 0.2s; 
+            transition: transform 0.1s; 
         }
-        button:active { transform: scale(0.96); }
+        button.send-btn:active { transform: scale(0.96); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
     </style>
@@ -188,11 +203,14 @@ HTML_TEMPLATE = """
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <div class="avatar">👩💼</div>
-            <div class="header-info">
-                <h2>سارة - مساعد المبيعات</h2>
-                <p>متصلة الآن لمساعدتك</p>
+            <div class="header-left">
+                <div class="avatar">👩💼</div>
+                <div class="header-info">
+                    <h2>سارة - مساعد المبيعات</h2>
+                    <p>متصلة الآن لمساعدتك</p>
+                </div>
             </div>
+            <button class="clear-btn" onclick="clearHistory()">محادثة جديدة</button>
         </div>
         <div class="chat-box" id="chatBox">
             <div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊</div>
@@ -206,10 +224,13 @@ HTML_TEMPLATE = """
         </div>
         <div class="input-container">
             <input type="text" id="userInput" placeholder="اكتب سؤالك هنا..." onkeydown="if(event.key==='Enter') sendMsg()">
-            <button onclick="sendMsg()">إرسال</button>
+            <button class="send-btn" onclick="sendMsg()">إرسال</button>
         </div>
     </div>
     <script>
+        // حفظ سجل المحادثة في مصفوفة
+        let chatHistory = [];
+
         async function sendMsg() {
             const input = document.getElementById('userInput');
             const chatBox = document.getElementById('chatBox');
@@ -227,19 +248,28 @@ HTML_TEMPLATE = """
             typingIndicator.style.display = 'block';
             chatBox.scrollTop = chatBox.scrollHeight;
 
+            // إضافة رسالة المستخدم للسجل
+            chatHistory.push({ role: "user", parts: [{ text: text }] });
+
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ history: chatHistory })
                 });
                 const data = await res.json();
                 
                 // إدراج رد سارة مع تنسيق Markdown
+                const replyText = data.reply || data.error;
                 const botDiv = document.createElement('div');
                 botDiv.className = 'msg bot';
-                botDiv.innerHTML = marked.parse(data.reply || data.error);
+                botDiv.innerHTML = marked.parse(replyText);
                 chatBox.insertBefore(botDiv, typingIndicator);
+
+                // إضافة رد البوت للسجل
+                if (data.reply) {
+                    chatHistory.push({ role: "model", parts: [{ text: data.reply }] });
+                }
             } catch(e) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'msg bot';
@@ -250,6 +280,14 @@ HTML_TEMPLATE = """
 
             typingIndicator.style.display = 'none';
             chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function clearHistory() {
+            chatHistory = [];
+            const chatBox = document.getElementById('chatBox');
+            const typingIndicator = document.getElementById('typingIndicator');
+            chatBox.innerHTML = '<div class="msg bot">أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊</div>';
+            chatBox.appendChild(typingIndicator);
         }
     </script>
 </body>
@@ -262,13 +300,15 @@ def home():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    user_message = request.json.get('message', '')
-    if not user_message:
+    history = request.json.get('history', [])
+    if not history:
         return jsonify({'error': 'الرسالة فارغة'}), 400
     try:
+        # إرسال السجل الكامل مع تعليمات النظام
         response = client.models.generate_content(
             model='gemini-3.6-flash',
-            contents=f"{SYSTEM_INSTRUCTION}\n\nرسالة العميل: {user_message}"
+            contents=history,
+            config={'system_instruction': SYSTEM_INSTRUCTION}
         )
         return jsonify({'reply': response.text})
     except Exception as e:
