@@ -1,12 +1,10 @@
 import os
-import asyncio
-from flask import Flask, request, jsonify
-from google import genai
 import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# تعليمات النظام لـ سارة
+# تعليمات النظام والكتالوج المخصص لـ سارة
 SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
 مهامك:
@@ -15,15 +13,12 @@ SYSTEM_INSTRUCTION = """
 3. توجيه العميل لرابط الشراء عند رغبته في الطلب.
 """
 
-# جلب المتغيرات
+# المتغيرات الأساسية
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# إعداد عميل Gemini
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
 def send_telegram_message(chat_id, text):
-    """إرسال رد إلى مستخدم تلجرام مباشرة عبر HTTP API"""
+    """إرسال رد إلى مستخدم تلجرام"""
     if not TELEGRAM_TOKEN:
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -34,11 +29,48 @@ def send_telegram_message(chat_id, text):
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Error sending telegram message: {e}")
+
+def get_gemini_response(user_text):
+    """الترابط المباشر مع API الخاص بـ Gemini بدون تعقيد مكتبات خارجية"""
+    if not GEMINI_API_KEY:
+        return "خطأ: مفتاح GEMINI_API_KEY غير مضاف في Variables."
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "system_instruction": {
+            "parts": [{"text": SYSTEM_INSTRUCTION}]
+        },
+        "contents": [
+            {
+                "parts": [{"text": user_text}]
+            }
+        ]
+    }
+    
+    try:
+        res = requests.post(url, json=payload, timeout=15)
+        res_json = res.json()
+        
+        if res.status_code == 200:
+            candidates = res_json.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "لم يتم توليد نص.")
+            return "عذراً، لم أتمكن من إعداد الإجابة."
+        else:
+            error_msg = res_json.get("error", {}).get("message", "خطأ غير معروف")
+            print(f"Gemini API Error: {res.status_code} - {error_msg}")
+            return f"عذراً، حدث خطأ في النظام: {error_msg}"
+    except Exception as e:
+        print(f"Exception calling Gemini: {e}")
+        return "عذراً، حدث خطأ أثناء الاتصال بالخادم."
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent is active!"
+    return "Sarah Sales Agent is Active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
@@ -48,26 +80,13 @@ def telegram_webhook():
         chat_id = data["message"]["chat"]["id"]
         user_text = data["message"].get("text", "")
 
-        # التعامل مع أمر البداية
+        # الأمر الترحيبي
         if user_text == "/start":
             send_telegram_message(chat_id, "أهلاً بك! أنا سارة، كيف يمكنني مساعدتك اليوم؟ 😊")
             return jsonify({"status": "ok"})
 
-        # معالجة النصوص عبر Gemini
-        if client:
-            try:
-                response = client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=user_text,
-                    config={"system_instruction": SYSTEM_INSTRUCTION}
-                )
-                reply_text = response.text if response.text else "عذراً، لم أتمكن من إعداد الإجابة."
-            except Exception as e:
-                print(f"Gemini API Error: {e}")
-                reply_text = "عذراً، حدث خطأ أثناء معالجة الطلب."
-        else:
-            reply_text = "خطأ: لم يتم ضبط مفتاح Gemini API."
-
+        # التفاعل مع الذكاء الاصطناعي
+        reply_text = get_gemini_response(user_text)
         send_telegram_message(chat_id, reply_text)
 
     return jsonify({"status": "ok"})
