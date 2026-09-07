@@ -1,13 +1,11 @@
 import os
 import sqlite3
-from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # إعدادات البوت والاتصال بقاعدة البيانات
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
 
 DB_NAME = "store.db"
 
@@ -15,7 +13,6 @@ DB_NAME = "store.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # جدول المستخدمين ونقاط الولاء والإحالة
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -24,7 +21,6 @@ def init_db():
             referred_by INTEGER
         )
     ''')
-    # جدول المنتجات
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
             product_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +29,6 @@ def init_db():
             description TEXT
         )
     ''')
-    # إضافة منتجات تجريبية إذا كان الجدول فارغاً
     cursor.execute('SELECT COUNT(*) FROM products')
     if cursor.fetchone()[0] == 0:
         sample_products = [
@@ -48,7 +43,6 @@ def init_db():
 
 init_db()
 
-# دالة لوحة التحكم الرئيسية (القائمة السفلية)
 def get_main_menu():
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("📚 تصفح الكتالوج الرقمي", callback_data="catalog"))
@@ -56,13 +50,11 @@ def get_main_menu():
     markup.row(InlineKeyboardButton("💬 تواصل مع الدعم", callback_data="support"))
     return markup
 
-# أمر البدء /start مع رسالة ترحيب احترافية
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
     
-    # فحص نظام الإحالة إذا دخل عبر رابط شخص آخر
     args = message.text.split()
     referred_by = None
     if len(args) > 1:
@@ -79,20 +71,15 @@ def send_welcome(message):
     user = cursor.fetchone()
 
     if not user:
-        # تسجيل المستخدم الجديد وإعطائه نقاط ترحيبية أو ربطه بالمحيل
-        initial_points = 10  # نقاط ترحيبية افتتاحية
+        initial_points = 10
         cursor.execute('INSERT INTO users (user_id, username, points, referred_by) VALUES (?, ?, ?, ?)',
                        (user_id, username, initial_points, referred_by))
-        
-        # إذا كان لديه محيل، نكافئ المحيل بنقاط إضافية
         if referred_by:
             cursor.execute('UPDATE users SET points = points + 20 WHERE user_id = ?', (referred_by,))
-        
         conn.commit()
 
     conn.close()
 
-    # نص رسالة الترحيب المحدثة والأكثر احترافية
     welcome_text = (
         "أهلاً بك! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
@@ -102,7 +89,6 @@ def send_welcome(message):
     
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
 
-# التعامل مع الضغط على الأزرار
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     conn = sqlite3.connect(DB_NAME)
@@ -200,18 +186,6 @@ def handle_query(call):
 
     conn.close()
 
-# تشغيل التطبيق عبر خادم الويب (Webhook/Flask) لمتطلبات الاستضافة مثل Railway
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    json_str = request.get_data().decode("UTF-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@app.route("/")
-def index():
-    return "Sarah Sales Bot is running successfully!", 200
-
 if __name__ == "__main__":
-    # للاختبار المحلي
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    print("Sarah Sales Bot is running with polling...")
+    bot.infinity_polling()
