@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import threading
+from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -7,6 +9,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 bot = telebot.TeleBot(TOKEN)
 
+app = Flask(__name__)
 DB_NAME = "store.db"
 
 # تهيئة قاعدة البيانات وإنشاء الجداول إذا لم تكن موجودة
@@ -186,8 +189,20 @@ def handle_query(call):
 
     conn.close()
 
-if __name__ == "__main__":
-    print("Sarah Sales Bot is starting...")
-    # إزالة أي ويبهوك قديم لضمان عمل الـ Polling بسلاسة
+@app.route("/")
+def index():
+    return "Sarah Sales Bot is running!", 200
+
+# تشغيل البوت عبر Thread مستقل ليعمل الـ Polling بالتوازي مع خادم الويب
+def run_bot():
     bot.remove_webhook()
     bot.infinity_polling()
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run_bot)
+    t.daemon = True
+    t.start()
+    
+    # تشغيل سيرفر الفلاسك لتررضي منصة Railway وتمنع الـ Crashed
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
