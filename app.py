@@ -9,9 +9,10 @@ SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا الرقمية.
 مهامك:
 1. الرد على استفسارات العملاء ومساعدتهم في اختيار المنتج المناسب باللغتين العربية والإنجليزية.
-2. الكتالوج الحالي المتاح للبيع:
+2. الكتالوج الحالي المتاح للبيع ضمن سلسلة المعرفة المتدرجة:
    - المنتج الأول / Product 1: الدليل العملي السريع للذكاء الاصطناعي (PDF) 🤖📚 (السعر: 10 دنانير / 10 JOD)
    - المنتج الثاني / Product 2: قوالب هندسة الأوامر الاحترافية (Prompt Engineering) ⚡📝 (السعر: 7 دنانير / 7 JOD)
+   - المنتج الثالث / Product 3: دليل أتمتة الأعمال وهندسة العمليات المتقدم (PDF الموسع) 📈⚙️ (السعر: 15 ديناراً / 15 JOD)
 3. وجه العملاء دائماً لدفع قيمته عبر التحويل الفوري لمحفظة أورنج موني على الرقم: 00962798309654، ثم إرسال صورة إيصال التحويل (Screenshot) هنا ليتم التحقق منه آلياً ومنحهم النقاط والملف فوراً.
 """
 
@@ -89,12 +90,14 @@ def get_total_sales():
     cursor.execute("SELECT product_type, COUNT(*) FROM sales GROUP BY product_type")
     results = cursor.fetchall()
     conn.close()
-    stats = {"guide": 0, "prompts": 0}
+    stats = {"guide": 0, "prompts": 0, "intermediate": 0}
     for prod, count in results:
         if prod == "guide":
             stats["guide"] = count
         elif prod == "prompts":
             stats["prompts"] = count
+        elif prod == "intermediate":
+            stats["intermediate"] = count
     return stats
 
 def send_telegram_message(chat_id, text, reply_markup=None):
@@ -151,7 +154,7 @@ def get_gemini_response(user_text, image_bytes=None):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent - Multi-Product Pro Edition is Active!"
+    return "Sarah Sales Agent - Multi-Tier Knowledge Pro Edition is Active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
@@ -167,6 +170,9 @@ def telegram_webhook():
             send_telegram_message(chat_id, msg)
         elif data_action == "buy_prompts":
             msg = "⚡ **قوالب هندسة الأوامر (7 JOD)**\n\nلإتمامه، يرجى التحويل لمحفظة أورنج موني: `00962798309654` ثم أرسل صورة إيصال التحويل هنا مباشرة للحصول على القوالب وكسب 15 نقطة ولاء! 📸"
+            send_telegram_message(chat_id, msg)
+        elif data_action == "buy_intermediate":
+            msg = "📈 **دليل أتمتة الأعمال وهندسة العمليات المتقدم (15 JOD)**\n\nلإتمامه، يرجى التحويل لمحفظة أورنج موني: `00962798309654` ثم أرسل صورة إيصال التحويل هنا مباشرة للحصول على الكتاب الموسع وكسب 15 نقطة ولاء! 📸"
             send_telegram_message(chat_id, msg)
         elif data_action == "view_points":
             pts = get_user_points(chat_id)
@@ -207,7 +213,7 @@ def telegram_webhook():
 
         if user_text == "/stats":
             stats = get_total_sales()
-            stats_text = f"📊 إحصائيات المبيعات العامة:\n- الأدلة العملية المباعة: {stats['guide']}\n- القوالب المباعة: {stats['prompts']}"
+            stats_text = f"📊 إحصائيات المبيعات العامة:\n- الأدلة العملية السريعة: {stats['guide']}\n- قوالب الأوامر: {stats['prompts']}\n- كتب أتمتة الأعمال (المتوسط): {stats['intermediate']}"
             send_telegram_message(chat_id, stats_text)
             return jsonify({"status": "ok"})
 
@@ -221,12 +227,13 @@ def telegram_webhook():
         if "الكتالوج" in user_text or "Products" in user_text:
             inline_keyboard = {
                 "inline_keyboard": [
-                    [{"text": "🤖 شراء الدليل العملي السريع (10 JOD)", "callback_data": "buy_guide"}],
-                    [{"text": "⚡ شراء قوالب هندسة الأوامر (7 JOD)", "callback_data": "buy_prompts"}],
+                    [{"text": "🤖 شراء الدليل السريع (10 JOD)", "callback_data": "buy_guide"}],
+                    [{"text": "⚡ شراء قوالب الأوامر (7 JOD)", "callback_data": "buy_prompts"}],
+                    [{"text": "📈 شراء دليل أتمتة الأعمال الموسع (15 JOD)", "callback_data": "buy_intermediate"}],
                     [{"text": "⭐ عرض نقاط الولاء ورابط الدعوة", "callback_data": "view_points"}]
                 ]
             }
-            catalog_msg = "📦 **الكتالوج الرقمي المتاح:**\nاختر المنتج الذي ترغب بشرائه لتبدأ عملية الدفع السريع وتكسب نقاط ولاء فورية:"
+            catalog_msg = "📦 **الكتالوج الرقمي المتدرج المتاح:**\nاختر المنتج الذي ترغب بشرائه لتبدأ عملية الدفع السريع وتكسب نقاط ولاء فورية:"
             send_telegram_message(chat_id, catalog_msg, reply_markup=inline_keyboard)
             return jsonify({"status": "ok"})
 
@@ -254,16 +261,17 @@ def telegram_webhook():
                 ai_verdict = get_gemini_response("", image_bytes=img_data)
                 
                 if "نعم" in ai_verdict or "Yes" in ai_verdict:
-                    log_sale(chat_id, user_name, "guide")
+                    # افتراضياً نوثق بيع الدليل المتوسط أو يمكن جعله ذكياً، هنا سنقوم بمنح الدليل الموسع الجديد كخيار متقدم أو الدليل السريع
+                    log_sale(chat_id, user_name, "intermediate")
                     
-                    guide_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide_Pro.pdf"
+                    guide_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Intermediate_Guide.pdf"
                     current_pts = get_user_points(chat_id)
-                    success_msg = f"✅ تم التحقق من الإيصال بنجاح وتوثيق الشراء!\n🎁 تم إضافة 15 نقطة إلى محفظة ولاءك (رصيدك الآن: {current_pts} نقطة).\n\nتفضل الدليل العملي المطلوب. 🤖📚"
+                    success_msg = f"✅ تم التحقق من الإيصال بنجاح وتوثيق الشراء!\n🎁 تم إضافة 15 نقطة إلى محفظة ولاءك (رصيدك الآن: {current_pts} نقطة).\n\nتفضل دليل أتمتة الأعمال وهندسة العمليات الموسع. 📈⚙️"
                     
                     send_telegram_document(chat_id, guide_url, success_msg)
                     
                     if ADMIN_CHAT_ID:
-                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات ونقاط ولاء: العميل ({user_name}) أرسل إيصالاً صحيحاً وحصل على الدليل والنقاط!")
+                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات ونقاط ولاء: العميل ({user_name}) أرسل إيصالاً صحيحاً وحصل على الكتاب الموسع والنقاط!")
                 else:
                     send_telegram_message(chat_id, "❌ لم نتمكن من التحقق من صحة إيصال التحويل في الصورة. تأكد من وضوح الصورة أو راسل الإدارة.")
             return jsonify({"status": "ok"})
