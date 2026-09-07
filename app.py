@@ -6,11 +6,11 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 SYSTEM_INSTRUCTION = """
-أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
+أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا الرقمية.
 مهامك:
 1. الرد على استفسارات العملاء ومساعدتهم في اختيار المنتج المناسب باللغتين العربية والإنجليزية.
 2. الكتالوج الحالي المتاح للبيع:
-   - المنتج الأول / Product 1: كتاب "دليل المبتدئ إلى الذكاء الاصطناعي" (PDF) 🤖📚 (السعر: 10 دنانير / 10 JOD)
+   - المنتج الأول / Product 1: الدليل العملي السريع للذكاء الاصطناعي (PDF) 🤖📚 (السعر: 10 دنانير / 10 JOD)
    - المنتج الثاني / Product 2: قوالب هندسة الأوامر الاحترافية (Prompt Engineering) ⚡📝 (السعر: 7 دنانير / 7 JOD)
 3. وجه العملاء دائماً لدفع قيمته عبر التحويل الفوري لمحفظة أورنج موني على الرقم: 00962798309654، ثم إرسال صورة إيصال التحويل (Screenshot) هنا ليتم التحقق منه آلياً ومنحهم النقاط والملف فوراً.
 """
@@ -24,7 +24,6 @@ DB_NAME = "store_database.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # جدول المبيعات
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +33,6 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # جدول الولاء والنقاط وإحالة الأصدقاء
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS loyalty (
             user_id TEXT PRIMARY KEY,
@@ -54,7 +52,6 @@ def log_sale(user_id, user_name, product_type):
     cursor.execute("INSERT INTO sales (user_id, user_name, product_type) VALUES (?, ?, ?)", 
                    (str(user_id), user_name, product_type))
     
-    # تحديث أو إضافة النقاط (إضافة 15 نقطة ولاء لكل عملية شراء)
     cursor.execute("SELECT points FROM loyalty WHERE user_id = ?", (str(user_id),))
     row = cursor.fetchone()
     if row:
@@ -80,8 +77,7 @@ def register_user(user_id, user_name, referrer_id=None):
     cursor.execute("SELECT user_id FROM loyalty WHERE user_id = ?", (str(user_id),))
     if not cursor.fetchone():
         cursor.execute("INSERT INTO loyalty (user_id, user_name, points, referred_by) VALUES (?, ?, ?, ?)", 
-                       (str(user_id), user_name, 5, referrer_id)) # 5 نقاط ترحيبية للمستخدم الجديد
-        # إذا كان هناك مُحيل (Referrer)، امنحه 10 نقاط مكافأة دعوة صديق!
+                       (str(user_id), user_name, 5, referrer_id))
         if referrer_id and referrer_id != str(user_id):
             cursor.execute("UPDATE loyalty SET points = points + 10 WHERE user_id = ?", (str(referrer_id),))
     conn.commit()
@@ -93,10 +89,10 @@ def get_total_sales():
     cursor.execute("SELECT product_type, COUNT(*) FROM sales GROUP BY product_type")
     results = cursor.fetchall()
     conn.close()
-    stats = {"book": 0, "prompts": 0}
+    stats = {"guide": 0, "prompts": 0}
     for prod, count in results:
-        if prod == "book":
-            stats["book"] = count
+        if prod == "guide":
+            stats["guide"] = count
         elif prod == "prompts":
             stats["prompts"] = count
     return stats
@@ -155,21 +151,19 @@ def get_gemini_response(user_text, image_bytes=None):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent - Ultimate Loyalty & Inline Pro Edition is Active!"
+    return "Sarah Sales Agent - Multi-Product Pro Edition is Active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
     data = request.get_json(force=True)
     
-    # معالجة الضغط على الأزرار التفاعلية العائمة (Inline Keyboards)
     if "callback_query" in data:
         callback = data["callback_query"]
         chat_id = callback["message"]["chat"]["id"]
         data_action = callback["data"]
-        user_name = callback["from"].get("first_name", "عميل")
-
-        if data_action == "buy_book":
-            msg = "📚 **كتاب دليل الذكاء الاصطناعي (10 JOD)**\n\nلإتمامه، يرجى التحويل لمحفظة أورنج موني: `00962798309654` ثم أرسل صورة إيصال التحويل هنا مباشرة للحصول على الكتاب وكسب 15 نقطة ولاء! 📸"
+        
+        if data_action == "buy_guide":
+            msg = "🤖 **الدليل العملي السريع للذكاء الاصطناعي (10 JOD)**\n\nلإتمامه، يرجى التحويل لمحفظة أورنج موني: `00962798309654` ثم أرسل صورة إيصال التحويل هنا مباشرة للحصول على الدليل وكسب 15 نقطة ولاء! 📸"
             send_telegram_message(chat_id, msg)
         elif data_action == "buy_prompts":
             msg = "⚡ **قوالب هندسة الأوامر (7 JOD)**\n\nلإتمامه، يرجى التحويل لمحفظة أورنج موني: `00962798309654` ثم أرسل صورة إيصال التحويل هنا مباشرة للحصول على القوالب وكسب 15 نقطة ولاء! 📸"
@@ -177,7 +171,7 @@ def telegram_webhook():
         elif data_action == "view_points":
             pts = get_user_points(chat_id)
             ref_link = f"https://t.me/SarahSalesAgent_bot?start={chat_id}"
-            msg = f"⭐ **محفظة الولاء الخاص بك:**\n\n- رصيد نقاطك الحالي: `{pts}` نقطة 🎁\n\n🔗 **رابط الدعوة الخاص بك:**\n{ref_link}\n\n*(شارك الرابط مع أصدقائك، واكسب 10 نقاط عن كل صديق ينضم للمتجر!)*"
+            msg = f"⭐ **محفظة الولاء الخاص بك:**\n\n- رصيد نقاطك الحالي: `{pts}` نقطة 🎁\n\n🔗 **رابط الدعوة الخاص بك:**\n{ref_link}"
             send_telegram_message(chat_id, msg)
         
         return jsonify({"status": "ok"})
@@ -188,7 +182,6 @@ def telegram_webhook():
         user_text = message.get("text", "")
         user_name = message["from"].get("first_name", "عميل")
 
-        # لوحة الأزرار الثابتة بالأسفل
         main_keyboard = {
             "keyboard": [
                 [{"text": "📚 الكتالوج والشراء | Products"}, {"text": "⭐ محفظة الولاء | Points"}],
@@ -197,7 +190,6 @@ def telegram_webhook():
             "resize_keyboard": "True"
         }
 
-        # التعامل مع نظام الإحالة (Referral) عند بدء الاستخدام /start REF_ID
         if user_text.startswith("/start"):
             parts = user_text.split()
             referrer_id = parts[1] if len(parts) > 1 else None
@@ -211,27 +203,25 @@ def telegram_webhook():
             send_telegram_message(chat_id, welcome_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
-        # تسجيل المستخدم إذا لم يكن مسجلاً
         register_user(chat_id, user_name)
 
         if user_text == "/stats":
             stats = get_total_sales()
-            stats_text = f"📊 إحصائيات المبيعات العامة:\n- الكتب المباعة: {stats['book']}\n- القوالب المباعة: {stats['prompts']}"
+            stats_text = f"📊 إحصائيات المبيعات العامة:\n- الأدلة العملية المباعة: {stats['guide']}\n- القوالب المباعة: {stats['prompts']}"
             send_telegram_message(chat_id, stats_text)
             return jsonify({"status": "ok"})
 
         if user_text == "/points" or "محفظة الولاء" in user_text:
             pts = get_user_points(chat_id)
             ref_link = f"https://t.me/SarahSalesAgent_bot?start={chat_id}"
-            points_msg = f"⭐ **محفظة الولاء ونقاط المكافآت:**\n\n- رصيدك الحالي: `{pts}` نقطة 🎁\n\n🔗 **رابط الدعوة (Referral Link):**\n{ref_link}\n\n*(شارك هذا الرابط مع أصدقائك، واكسب 10 نقاط لكل صديق ينضم إلى البوت!)*"
+            points_msg = f"⭐ **محفظة الولاء ونقاط المكافآت:**\n\n- رصيدك الحالي: `{pts}` نقطة 🎁\n\n🔗 **رابط الدعوة (Referral Link):**\n{ref_link}"
             send_telegram_message(chat_id, points_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
         if "الكتالوج" in user_text or "Products" in user_text:
-            # الأزرار التفاعلية العائمة المرفقة مع الرسالة (Inline Keyboards)
             inline_keyboard = {
                 "inline_keyboard": [
-                    [{"text": "🤖 شراء كتاب الذكاء الاصطناعي (10 JOD)", "callback_data": "buy_book"}],
+                    [{"text": "🤖 شراء الدليل العملي السريع (10 JOD)", "callback_data": "buy_guide"}],
                     [{"text": "⚡ شراء قوالب هندسة الأوامر (7 JOD)", "callback_data": "buy_prompts"}],
                     [{"text": "⭐ عرض نقاط الولاء ورابط الدعوة", "callback_data": "view_points"}]
                 ]
@@ -250,7 +240,6 @@ def telegram_webhook():
             send_telegram_message(chat_id, contact_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
-        # معالجة صور الإيصالات عبر الذكاء الاصطناعي + منح نقاط الولاء
         if "photo" in message:
             photo_list = message["photo"]
             file_id = photo_list[-1]["file_id"]
@@ -265,22 +254,20 @@ def telegram_webhook():
                 ai_verdict = get_gemini_response("", image_bytes=img_data)
                 
                 if "نعم" in ai_verdict or "Yes" in ai_verdict:
-                    # تسجيل المبيع ومنح 15 نقطة ولاء للعميل
-                    log_sale(chat_id, user_name, "book")
+                    log_sale(chat_id, user_name, "guide")
                     
-                    book_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide.pdf"
+                    guide_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide_Pro.pdf"
                     current_pts = get_user_points(chat_id)
-                    success_msg = f"✅ تم التحقق من الإيصال بنجاح وتوثيق الشراء!\n🎁 تم إضافة 15 نقطة إلى محفظة ولاءك (رصيدك الآن: {current_pts} نقطة).\n\nتفضل كتابك المطلوب. 🤖📚"
+                    success_msg = f"✅ تم التحقق من الإيصال بنجاح وتوثيق الشراء!\n🎁 تم إضافة 15 نقطة إلى محفظة ولاءك (رصيدك الآن: {current_pts} نقطة).\n\nتفضل الدليل العملي المطلوب. 🤖📚"
                     
-                    send_telegram_document(chat_id, book_url, success_msg)
+                    send_telegram_document(chat_id, guide_url, success_msg)
                     
                     if ADMIN_CHAT_ID:
-                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات ونقاط ولاء: العميل ({user_name}) أرسل إيصالاً صحيحاً وحصل على المنتج والنقاط!")
+                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات ونقاط ولاء: العميل ({user_name}) أرسل إيصالاً صحيحاً وحصل على الدليل والنقاط!")
                 else:
                     send_telegram_message(chat_id, "❌ لم نتمكن من التحقق من صحة إيصال التحويل في الصورة. تأكد من وضوح الصورة أو راسل الإدارة.")
             return jsonify({"status": "ok"})
 
-        # الرد الذكي العادي عبر جيميني
         reply_text = get_gemini_response(user_text)
         send_telegram_message(chat_id, reply_text, reply_markup=main_keyboard)
 
