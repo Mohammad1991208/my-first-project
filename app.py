@@ -8,14 +8,15 @@ SYSTEM_INSTRUCTION = """
 أنت سارة، وكيلة مبيعات محترفة وودودة لمؤسستنا.
 مهامك:
 1. الرد على استفسارات العملاء ومساعدتهم في اختيار المنتج المناسب.
-2. الكتالوج الحالي المتاح للبيع:
-   - المنتج الأول: كتاب "دليل المبتدئ إلى الذكاء الاصطناعي" (PDF) 🤖📚
-     * السعر: 10 دنانير أردنية.
-   - المنتج الثاني: قوالب هندسة الأوامر الاحترافية (Prompt Engineering) ⚡📝
-     * السعر: 7 دنانير أردنية.
-3. عندما يختار العميل منتجاً، وجهه حصراً لدفع قيمته عبر التحويل الفوري إلى محفظة أورنج موني على الرقم التالي: 00962798309654:
-   - لشراء الكتاب، اطلب منه إرسال كلمة "تم التحويل للكتاب".
-   - لشراء القوالب، اطلب منه إرسال كلمة "تم تحويل القوالب".
+2. يدعم المتجر اللغتين العربية والإنجليزية. رد دائماً بنفس لغة العميل (إذا تحدث بالعربية رد بالعربية، وإذا تحدث بالإنجليزية رد بالإنجليزية).
+3. الكتالوج الحالي المتاح للبيع:
+   - المنتج الأول / Product 1: كتاب "دليل المبتدئ إلى الذكاء الاصطناعي" (PDF) 🤖📚
+     * السعر / Price: 10 دنانير أردنية / 10 JOD.
+   - المنتج الثاني / Product 2: قوالب هندسة الأوامر الاحترافية (Prompt Engineering) ⚡📝
+     * السعر / Price: 7 دنانير أردنية / 7 JOD.
+4. عندما يختار العميل منتجاً، وجهه حصراً لدفع قيمته عبر التحويل الفوري إلى محفظة أورنج موني على الرقم التالي: 00962798309654:
+   - لشراء الكتاب، اطلب منه إرسال كلمة "تم التحويل للكتاب" أو "Paid Book" بالإنجليزية.
+   - لشراء القوالب، اطلب منه إرسال كلمة "تم تحويل القوالب" أو "Paid Prompts" بالإنجليزية.
 """
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -58,7 +59,7 @@ def get_gemini_response(user_text):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent with Multiple Products is Active!"
+    return "Sarah Sales Agent with Multi-Language Support is Active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
@@ -68,17 +69,17 @@ def telegram_webhook():
         user_text = data["message"].get("text", "")
 
         if user_text == "/start":
-            send_telegram_message(chat_id, "أهلاً بك في متجرنا الرقمي! أنا سارة، مساعدة المبيعات. كيف يمكنني خدمتك اليوم؟ 😊")
+            send_telegram_message(chat_id, "أهلاً بك في متجرنا الرقمي! أنا سارة، مساعدة المبيعات. كيف يمكنني خدمتك اليوم؟ 😊\nWelcome to our digital store! I am Sarah, your sales assistant. How can I help you today? 😊")
             return jsonify({"status": "ok"})
 
-        if "تم التحويل للكتاب" in user_text or user_text == "تم التحويل":
+        if "تم التحويل للكتاب" in user_text or user_text == "تم التحويل" or "Paid Book" in user_text:
             book_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide.pdf"
-            send_telegram_document(chat_id, book_url, "شكراً لتأكيد الدفع! تفضل كتاب 'دليل المبتدئ إلى الذكاء الاصطناعي'. 🤖📚")
+            send_telegram_document(chat_id, book_url, "شكراً لتأكيد الدفع! تفضل كتاب 'دليل المبتدئ إلى الذكاء الاصطناعي'. 🤖📚\nThank you for confirming payment! Here is your AI Beginner's Guide.")
             return jsonify({"status": "ok"})
 
-        if "تم تحويل القوالب" in user_text:
+        if "تم تحويل القوالب" in user_text or "Paid Prompts" in user_text:
             prompts_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/Prompts_Guide.txt"
-            send_telegram_document(chat_id, prompts_url, "شكراً لتأكيد الدفع! تفضل 'قوالب هندسة الأوامر الاحترافية'. ⚡📝")
+            send_telegram_document(chat_id, prompts_url, "شكراً لتأكيد الدفع! تفضل 'قوالب هندسة الأوامر الاحترافية'. ⚡📝\nThank you for confirming payment! Here are your Prompt Engineering templates.")
             return jsonify({"status": "ok"})
 
         reply_text = get_gemini_response(user_text)
