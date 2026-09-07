@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import requests
 from flask import Flask, request, jsonify
 
@@ -19,10 +20,50 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 
-sales_stats = {
-    "books_sold": 0,
-    "prompts_sold": 0
-}
+# إعداد قاعدة البيانات الدائمة SQLite
+DB_NAME = "store_database.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    # جدول لتسجيل العمليات والمبيعات الدائمة
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            user_name TEXT,
+            product_type TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# تشغيل إنشاء الجدول عند بدء التطبيق
+init_db()
+
+def log_sale(user_id, user_name, product_type):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO sales (user_id, user_name, product_type) VALUES (?, ?, ?)", 
+                   (str(user_id), user_name, product_type))
+    conn.commit()
+    conn.close()
+
+def get_total_sales():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT product_type, COUNT(*) FROM sales GROUP BY product_type")
+    results = cursor.fetchall()
+    conn.close()
+    
+    stats = {"book": 0, "prompts": 0}
+    for prod, count in results:
+        if prod == "book":
+            stats["book"] = count
+        elif prod == "prompts":
+            stats["prompts"] = count
+    return stats
 
 def send_telegram_message(chat_id, text, reply_markup=None):
     if not TELEGRAM_TOKEN:
@@ -45,14 +86,13 @@ def get_gemini_response(user_text, image_bytes=None):
     
     models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
     
-    # إذا أرسل المستخدم صورة إيصال
     if image_bytes:
         import base64
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
         payload = {
             "contents": [{
                 "parts": [
-                    {"text": "هذه صورة إيصال تحويل مالي لمحفظة أورنج موني. هل هذه الصورة تبدو كإيصال تحويل مالي صحيح؟ أجب بكلمة 'نعم' أو 'لا' فقط مع سبب قصير جداً."},
+                    {"text": "هذه صورة إيصال تحويل مالي لمحفظة أورنج موني. هل هذه الصورة تبدو كإيصال تحويل مالي صحيح؟ أجب بكلمة 'نعم' أو 'لا' فقط."},
                     {
                         "inline_data": {
                             "mime_type": "image/jpeg",
@@ -85,7 +125,7 @@ def get_gemini_response(user_text, image_bytes=None):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Sarah Sales Agent - Vision Edition is Active!"
+    return "Sarah Sales Agent - Database Pro Edition is Active!"
 
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
@@ -114,7 +154,8 @@ def telegram_webhook():
             return jsonify({"status": "ok"})
 
         if user_text == "/stats":
-            stats_text = f"📊 إحصائيات المبيعات الحالية:\n- كتب تم بيعها: {sales_stats['books_sold']}\n- قوالب تم بيعها: {sales_stats['prompts_sold']}"
+            stats = get_total_sales()
+            stats_text = f"📊 إحصائيات المبيعات من قاعدة البيانات الدائمة:\n- الكتب المباعة: {stats['book']}\n- القوالب المباعة: {stats['prompts']}"
             send_telegram_message(chat_id, stats_text)
             return jsonify({"status": "ok"})
 
@@ -123,13 +164,13 @@ def telegram_webhook():
                 "📦 الكتالوج المتاح:\n"
                 "1️⃣ كتاب دليل الذكاء الاصطناعي (10 JOD)\n"
                 "2️⃣ قوالب هندسة الأوامر (7 JOD)\n\n"
-                "بعد التحويل لأورنج موني، أرسل صورة الإيصال هنا مباشرة وسأتأكد منها وأرسل لك ملفك فوراً! 📸"
+                "بعد التحويل لأورنج موني، أرسل صورة الإيصال هنا وسأتأكد منها وأرسل لك ملفك فوراً! 📸"
             )
             send_telegram_message(chat_id, products_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
         if "طرق الدفع" in user_text or "Payment" in user_text:
-            pay_msg = "💳 يتم الدفع عبر التحويل الفوري لمحفظة أورنج موني على الرقم:\n00962798309654\nثم أرسل صورة الإيصال (صورة شاشة) هنا للحصول على الملف فوراً."
+            pay_msg = "💳 يتم الدفع عبر التحويل الفوري لمحفظة أورنج موني على الرقم:\n00962798309654\nثم أرسل صورة الإيصال للحصول على الملف فوراً."
             send_telegram_message(chat_id, pay_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
@@ -138,13 +179,11 @@ def telegram_webhook():
             send_telegram_message(chat_id, contact_msg, reply_markup=main_keyboard)
             return jsonify({"status": "ok"})
 
-        # التعامل مع صور الإيصالات المرسلة من العملاء
+        # فحص إيصالات الدفع بالذكاء الاصطناعي مع حفظ المبيع في قاعدة البيانات
         if "photo" in message:
             photo_list = message["photo"]
-            # أخذ أعلى دقة للصورة
             file_id = photo_list[-1]["file_id"]
             
-            # جلب رابط الصورة من تليجرام
             file_info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}"
             info_res = requests.get(file_info_url).json()
             if info_res.get("ok"):
@@ -152,39 +191,39 @@ def telegram_webhook():
                 download_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
                 img_data = requests.get(download_url).content
                 
-                # فحص الصورة عبر الذكاء الاصطناعي
                 ai_verdict = get_gemini_response("", image_bytes=img_data)
                 
-                if "نعم" in ai_verdict or "Yes" in ai_verdict or "صحيح" in ai_verdict:
-                    # افتراضياً نرسل الكتاب كافتراض، أو يمكن تخيير العميل، هنا نرسل الكتاب والقوالب كمكافأة أو نطلب تحديد المنتج
-                    sales_stats["books_sold"] += 1
+                if "نعم" in ai_verdict or "Yes" in ai_verdict:
+                    # حفظ عملية بيع الكتاب في قاعدة البيانات كافتراضي
+                    log_sale(chat_id, user_name, "book")
+                    
                     book_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide.pdf"
-                    send_telegram_document(chat_id, book_url, "✅ تم التحقق من الإيصال بنجاح عبر الذكاء الاصطناعي! تفضل كتابك المطلوب. 🤖📚")
+                    send_telegram_document(chat_id, book_url, "✅ تم التحقق من الإيصال بنجاح وحفظ سجلك في النظام! تفضل كتابك. 🤖📚")
                     
                     if ADMIN_CHAT_ID:
-                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات مؤكد بالصورة: العميل ({user_name}) أرسل إيصالاً صحيحاً وتم تسليمه المنتج!")
+                        send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات (قاعدة البيانات): العميل ({user_name}) أرسل إيصالاً صحيحاً وتم تسليمه المنتج!")
                 else:
-                    send_telegram_message(chat_id, "❌ لم نتمكن من التحقق من صحة إيصال التحويل في الصورة بدقة. تأكد من وضوح الإيصال أو راسل الإدارة.")
+                    send_telegram_message(chat_id, "❌ لم نتمكن من التحقق من صحة إيصال التحويل في الصورة. تأكد من وضوحها أو راسل الإدارة.")
             return jsonify({"status": "ok"})
 
-        # الكلمات القديمة اليدوية كخيار احتياطي
+        # الخيارات اليدوية الاحتياطية
         if "تم التحويل للكتاب" in user_text or "Paid Book" in user_text:
-            sales_stats["books_sold"] += 1
+            log_sale(chat_id, user_name, "book")
             book_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/AI_Guide.pdf"
             send_telegram_document(chat_id, book_url, "شكراً لتأكيد الدفع! تفضل كتاب 'دليل المبتدئ إلى الذكاء الاصطناعي'. 🤖📚")
             if ADMIN_CHAT_ID:
-                send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات: العميل ({user_name}) طلب كتاب الذكاء الاصطناعي!")
+                send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات: العميل ({user_name}) طلب الكتاب يدوياً.")
             return jsonify({"status": "ok"})
 
         if "تم تحويل القوالب" in user_text or "Paid Prompts" in user_text:
-            sales_stats["prompts_sold"] += 1
+            log_sale(chat_id, user_name, "prompts")
             prompts_url = "https://raw.githubusercontent.com/Mohammad1991208/my-first-project/main/Prompts_Guide.txt"
             send_telegram_document(chat_id, prompts_url, "شكراً لتأكيد الدفع! تفضل 'قوالب هندسة الأوامر الاحترافية'. ⚡📝")
             if ADMIN_CHAT_ID:
-                send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات: العميل ({user_name}) طلب قوالب هندسة الأوامر!")
+                send_telegram_message(ADMIN_CHAT_ID, f"🔔 تنبيه مبيعات: العميل ({user_name}) طلب القوالب يدوياً.")
             return jsonify({"status": "ok"})
 
-        # المحادثة العادية عبر جيميني
+        # المحادثة الذكية العادية
         reply_text = get_gemini_response(user_text)
         send_telegram_message(chat_id, reply_text, reply_markup=main_keyboard)
 
