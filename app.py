@@ -187,5 +187,7 @@ def handle_query(call):
     conn.close()
 
 if __name__ == "__main__":
-    print("Sarah Sales Bot is running with polling...")
+    print("Sarah Sales Bot is starting...")
+    # إزالة أي ويبهوك قديم لضمان عمل الـ Polling بسلاسة
+    bot.remove_webhook()
     bot.infinity_polling()
