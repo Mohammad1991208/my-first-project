@@ -28,7 +28,7 @@ def init_db():
         )
     ''')
     
-    # جدول المنتجات (مع إضافة حقل file_url لتسليم الملفات آلياً)
+    # جدول المنتجات
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
             product_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,15 +57,16 @@ def init_db():
         )
     ''')
     
-    # إضافة منتجات أولية تجريبية مع روابط تحميل افتراضية
-    cursor.execute("SELECT COUNT(*) FROM products")
-    if cursor.fetchone()[0] == 0:
-        sample_products = [
-            ("الكتاب الشامل في الذكاء الاصطناعي وتطبيقاته", 30.0, "مرجع عملاق وموسع يغطي مفاهيم الذكاء الاصطناعي.", "https://t.me/example_file_1"),
-            ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام.", "https://t.me/example_file_2"),
-            ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر.", "https://t.me/example_file_3")
-        ]
-        cursor.executemany('INSERT INTO products (name, price, description, file_url) VALUES (?, ?, ?, ?)', sample_products)
+    # إعادة تعيين وتحديث المنتجات بمنتجات رقمية عالية الأهمية والطلب
+    cursor.execute("DELETE FROM products")
+    sample_products = [
+        ("🚀 حزمة أتمتة الواتساب وخدمة العملاء بالذكاء الاصطناعي", 49.0, "دليل ونصوص برمجية جاهزة لربط بوت واتساب ذكي للرد على العملاء 24/7 وإتمام المبيعات تلقائياً.", "https://t.me/example_whatsapp_automation"),
+        ("📚 المرجع الشامل لهندسة الأوامر المتقدمة (Prompt Engineering Masterclass)", 25.0, "أكثر من 500 أمر احترافي ومختبر لـ ChatGPT و Claude لتوليد المحتوى، البرمجة، وتحليل البيانات.", "https://t.me/example_prompt_masterclass"),
+        ("💼 حزمة قوالب إدارة المشاريع ونظام العمل (Notion OS)", 19.0, "نظام متكامل لإدارة المهام، المبيعات، ومتابعة العملاء المحتملين عبر منصة Notion.", "https://t.me/example_notion_os"),
+        ("📈 استراتيجية الإعلانات الممولة وحملات التحويل العالي", 35.0, "دليل خطوة بخطوة لإطلاق حملات إعلانية ناجحة بأقل تكلفة وأعلى عائد استثماري (ROI).", "https://t.me/example_ads_strategy"),
+        ("🤖 دليل بناء وتطوير بوتات تيليجرام التجارية المتقدمة", 20.0, "كود وخطوات بناء بوت مبيعات متكامل مشابه لهذا البوت تماماً مع شرح طريقة ربطه بالسيرفر.", "https://t.me/example_telegram_bot_guide")
+    ]
+    cursor.executemany('INSERT INTO products (name, price, description, file_url) VALUES (?, ?, ?, ?)', sample_products)
     
     # إضافة كود خصم تجريبي
     cursor.execute("INSERT OR IGNORE INTO promo_codes (code, discount_amount) VALUES ('SARAH5OFF', 5.0)")
@@ -77,9 +78,9 @@ init_db()
 
 def get_main_menu():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton("📚 تصفح الكتالوج الرقمي", callback_data="catalog"))
+    markup.row(InlineKeyboardButton("📚 تصفح الكتالوج الرقمي الاحترافي", callback_data="catalog"))
     markup.row(InlineKeyboardButton("⭐ محفظة الولاء والإحالة", callback_data="loyalty"))
-    markup.row(InlineKeyboardButton("💬 تواصل مع الدعم", callback_data="support"))
+    markup.row(InlineKeyboardButton("💬 تواصل مع الدعم الفني", callback_data="support"))
     return markup
 
 @bot.message_handler(commands=['start'])
@@ -117,9 +118,9 @@ def send_welcome(message):
     conn.close()
 
     welcome_text = (
-        "أهلاً بك! 🌟\n\n"
+        "أهلاً بك في منصة الحلول الرقمية المتقدمة! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
-        "حصلت على **10 نقاط هدية** عند انضمامك للمتجر! يمكنك تصفح المنتجات أو دعوت أصدقائك لمضاعفة نقاطك.\n\n"
+        "حصلت على **10 نقاط هدية** عند انضمامك! تصفح أقوى الأدوات والحزم الرقمية لمضاعفة إنتاجيتك ومبيعاتك.\n\n"
         "**كيف يمكنني خدمتك اليوم؟**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
@@ -150,13 +151,12 @@ def admin_panel(message):
         "📊 **لوحة تحكم المشرف الاحترافية (Enterprise Panel)**\n\n"
         f"• إجمالي عدد المستخدمين: **{total_users}**\n"
         f"• إجمالي نقاط الولاء الموزعة: **{total_points}**\n"
-        f"• عدد المنتجات في الكتالوج: **{total_products}**\n\n"
+        f"• عدد المنتجات الرقمية: **{total_products}**\n\n"
         "اختر العملية المطلوبة أدناه:"
     )
     
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton("📢 إرسال إعلان لجميع المستخدمين", callback_data="admin_broadcast"))
-    markup.row(InlineKeyboardButton("📦 إضافة منتج جديد", callback_data="admin_add_product"))
     markup.row(InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"))
     
     bot.send_message(message.chat.id, admin_text, parse_mode="Markdown", reply_markup=markup)
@@ -177,7 +177,7 @@ def handle_query(call):
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text="🛒 **الكتالوج الرقمي المتاح حالياً:**\nاختر المنتج المناسب لمعرفة التفاصيل والشراء:",
+            text="🛒 **الكتالوج الرقمي الاحترافي المتاح:**\nاختر الحزمة أو المنتج للاطلاع على التفاصيل والشراء:",
             parse_mode="Markdown",
             reply_markup=markup
         )
@@ -267,7 +267,6 @@ def handle_query(call):
                 reply_markup=markup
             )
             
-            # تسجيل الطلب كمعلق في القاعدة
             cursor.execute('INSERT INTO orders (user_id, product_id, status) VALUES (?, ?, ?)', (call.from_user.id, product_id, 'pending'))
             conn.commit()
             order_id = cursor.lastrowid
@@ -282,15 +281,13 @@ def handle_query(call):
                     f"• المنتج: **{name}** (${price})"
                 )
                 admin_markup = InlineKeyboardMarkup()
-                # زر تفاعلي لتأكيد الدفع وإرسال الملف فوراً للعميل آلياً
-                admin_markup.row(InlineKeyboardButton("✅ تأكيد الدفع وإرسال الملف", callback_data=f"approve_{order_id}_{call.from_user.id}_{product_id}"))
+                admin_markup.row(InlineKeyboardButton("✅ تأكيد الدفع وإرسال المنتج", callback_data=f"approve_{order_id}_{call.from_user.id}_{product_id}"))
                 
                 try:
                     bot.send_message(ADMIN_CHAT_ID, alert_msg, parse_mode="Markdown", reply_markup=admin_markup)
                 except:
                     pass
 
-    # ميزة الموافقة التلقائية من المشرف
     elif call.data.startswith("approve_"):
         parts = call.data.split("_")
         order_id = parts[1]
@@ -301,18 +298,15 @@ def handle_query(call):
         prod_data = cursor.fetchone()
         if prod_data:
             p_name, p_file = prod_data
-            # إرسال الملف للعميل تلقائياً
             try:
-                bot.send_message(target_user_id, f"🎉 **تم تأكيد الدفع بنجاح!**\nإليك رابط تحميل منتجك المطلوب: **{p_name}**\n\n🔗 رابط التحميل/الملف: {p_file}", parse_mode="Markdown")
-                bot.answer_callback_query(call.id, "✅ تم تأكيد الطلب وإرسال الملف للعميل بنجاح!", show_alert=True)
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=call.message.text + "\n\n✅ **[تم تأكيد الطلب وإرسال الملف للعميل]**", parse_mode="Markdown")
+                bot.send_message(target_user_id, f"🎉 **تم تأكيد الدفع بنجاح!**\nإليك رابط تحميل منتجك الرقمي: **{p_name}**\n\n🔗 رابط التحميل/الملف: {p_file}", parse_mode="Markdown")
+                bot.answer_callback_query(call.id, "✅ تم تأكيد الطلب وإرسال المنتج للعميل بنجاح!", show_alert=True)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=call.message.text + "\n\n✅ **[تم تأكيد الطلب وإرسال المنتج للعميل]**", parse_mode="Markdown")
             except Exception as e:
                 bot.answer_callback_query(call.id, f"حدث خطأ أثناء الإرسال للعميل: {e}", show_alert=True)
 
     elif call.data == "admin_broadcast":
         bot.answer_callback_query(call.id, "خاصية البث المباشر مفعلة. أرسل الأمر /broadcast متبوعاً بالرسالة.")
-    elif call.data == "admin_add_product":
-        bot.answer_callback_query(call.id, "تم تحديث المنتجات عبر قاعدة البيانات السحابية بنجاح.")
 
     elif call.data == "support":
         markup = InlineKeyboardMarkup()
@@ -320,7 +314,7 @@ def handle_query(call):
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text="💬 للإستفسارات الفورية، اكتب رسالتك هنا وسيتم تحويلها للإدارة.",
+            text="💬 للإستفسارات الفورية والدعم، اكتب رسالتك هنا وسيتم تحويلها للإدارة.",
             reply_markup=markup
         )
 
@@ -333,7 +327,6 @@ def handle_query(call):
         )
     conn.close()
 
-# أمر البث الإعلاني الجماعي لجميع المستخدمين
 @bot.message_handler(commands=['broadcast'])
 def broadcast_message(message):
     if message.from_user.id != ADMIN_CHAT_ID:
@@ -377,7 +370,7 @@ def handle_user_messages(message):
         try:
             bot.send_message(ADMIN_CHAT_ID, forward_text, parse_mode="Markdown")
             bot.forward_message(ADMIN_CHAT_ID, message.chat.id, message.message_id)
-            bot.reply_to(message, "✅ تم استلام إيصالك أو رسالتك وتحويلها للإدارة بنجاح. سيتم إرسال الملف فور التحقق!")
+            bot.reply_to(message, "✅ تم استلام إيصالك أو رسالتك وتحويلها للإدارة بنجاح. سيتم إرسال المنتج فور التحقق!")
         except Exception as e:
             bot.reply_to(message, "عذراً حدث خطأ في إرسال الرسالة.")
     else:
