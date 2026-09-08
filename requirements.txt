@@ -1,8 +1,5 @@
 flask
-google-genai
 gunicorn
 python-telegram-bot
-Flask
-pyTelegramBotAPI
-
-
+google-genai
+requests
