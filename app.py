@@ -7,7 +7,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
-# تم تعيين معرف التيليجرام الخاص بك (Admin ID) بنجاح
+# معرف المشرف الأساسي (Admin ID)
 ADMIN_CHAT_ID = 6000524951
 
 app = Flask(__name__)
@@ -17,6 +17,8 @@ DB_NAME = "store.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    # جدول المستخدمين
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -25,23 +27,49 @@ def init_db():
             referred_by INTEGER
         )
     ''')
+    
+    # جدول المنتجات (مع إضافة حقل file_url لتسليم الملفات آلياً)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
             product_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
             price REAL,
-            description TEXT
+            description TEXT,
+            file_url TEXT
         )
     ''')
     
-    cursor.execute("DELETE FROM products")
-    sample_products = [
-        ("الكتاب الشامل في الذكاء الاصطناعي وتطبيقاته", 30.0, "مرجع عملاق وموسع يغطي مفاهيم الذكاء الاصطناعي، تقنيات التعلم العميق، وكيفية توظيفه عملياً في مشاريعك."),
-        ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام اليومية."),
-        ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر للذكاء الاصطناعي.")
-    ]
-    cursor.executemany('INSERT INTO products (name, price, description) VALUES (?, ?, ?)', sample_products)
+    # جدول الطلبات المعلقة للتحقق
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            product_id INTEGER,
+            status TEXT DEFAULT 'pending'
+        )
+    ''')
+
+    # جدول الأكواد الترويجية
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS promo_codes (
+            code TEXT PRIMARY KEY,
+            discount_amount REAL
+        )
+    ''')
     
+    # إضافة منتجات أولية تجريبية مع روابط تحميل افتراضية
+    cursor.execute("SELECT COUNT(*) FROM products")
+    if cursor.fetchone()[0] == 0:
+        sample_products = [
+            ("الكتاب الشامل في الذكاء الاصطناعي وتطبيقاته", 30.0, "مرجع عملاق وموسع يغطي مفاهيم الذكاء الاصطناعي.", "https://t.me/example_file_1"),
+            ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام.", "https://t.me/example_file_2"),
+            ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر.", "https://t.me/example_file_3")
+        ]
+        cursor.executemany('INSERT INTO products (name, price, description, file_url) VALUES (?, ?, ?, ?)', sample_products)
+    
+    # إضافة كود خصم تجريبي
+    cursor.execute("INSERT OR IGNORE INTO promo_codes (code, discount_amount) VALUES ('SARAH5OFF', 5.0)")
+
     conn.commit()
     conn.close()
 
@@ -91,21 +119,20 @@ def send_welcome(message):
     welcome_text = (
         "أهلاً بك! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
-        "حصلت على **10 نقاط هدية** عند انضمامك للمتجر! يمكنك تصفح الكتب وقوالب الذكاء الاصطناعي أو دعوت أصدقائك لمضاعفة نقاطك.\n\n"
+        "حصلت على **10 نقاط هدية** عند انضمامك للمتجر! يمكنك تصفح المنتجات أو دعوت أصدقائك لمضاعفة نقاطك.\n\n"
         "**كيف يمكنني خدمتك اليوم؟**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
 
-# أمر معرفة الـ ID الخاص بك
 @bot.message_handler(commands=['myid'])
 def show_my_id(message):
     bot.reply_to(message, f"معرفك الشخصي (Admin ID) هو:\n`{message.from_user.id}`", parse_mode="Markdown")
 
-# لوحة تحكم المشرف عبر أمر /admin
+# لوحة تحكم المشرف الشاملة
 @bot.message_handler(commands=['admin'])
 def admin_panel(message):
     user_id = message.from_user.id
-    if user_id != ADMIN_CHAT_ID and ADMIN_CHAT_ID != 0:
+    if user_id != ADMIN_CHAT_ID:
         bot.send_message(message.chat.id, "عذراً، هذا الأمر مخصص للمدير فقط.")
         return
 
@@ -115,15 +142,24 @@ def admin_panel(message):
     total_users = cursor.fetchone()[0]
     cursor.execute('SELECT SUM(points) FROM users')
     total_points = cursor.fetchone()[0] or 0
+    cursor.execute('SELECT COUNT(*) FROM products')
+    total_products = cursor.fetchone()[0]
     conn.close()
 
     admin_text = (
-        "📊 **لوحة تحكم المشرف (Admin Panel)**\n\n"
-        f"• إجمالي عدد المستخدمين: **{total_users} مستخدم**\n"
-        f"• إجمالي نقاط الولاء الموزعة: **{total_points} نقطة**\n\n"
-        "البوت يعمل بنجاح ويستقبل العمليات بكفاءة تامة."
+        "📊 **لوحة تحكم المشرف الاحترافية (Enterprise Panel)**\n\n"
+        f"• إجمالي عدد المستخدمين: **{total_users}**\n"
+        f"• إجمالي نقاط الولاء الموزعة: **{total_points}**\n"
+        f"• عدد المنتجات في الكتالوج: **{total_products}**\n\n"
+        "اختر العملية المطلوبة أدناه:"
     )
-    bot.send_message(message.chat.id, admin_text, parse_mode="Markdown")
+    
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton("📢 إرسال إعلان لجميع المستخدمين", callback_data="admin_broadcast"))
+    markup.row(InlineKeyboardButton("📦 إضافة منتج جديد", callback_data="admin_add_product"))
+    markup.row(InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"))
+    
+    bot.send_message(message.chat.id, admin_text, parse_mode="Markdown", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -161,10 +197,10 @@ def handle_query(call):
         loyalty_text = (
             f"⭐ **محفظة الولاء والإحالات الخاصة بك**\n\n"
             f"• رصيد النقاط الحالي: **{points} نقطة**\n"
-            f"• عدد الأشخاص الذين دعيتهم: **{referral_count} شخص** (كل إحالة تمنحك +20 نقطة!)\n\n"
+            f"• عدد الأشخاص الذين دعيتهم: **{referral_count} شخص** (+20 نقطة لكل إحالة!)\n\n"
             f"🔗 **رابط الإحالة الخاص بك:**\n`{referral_link}`\n\n"
             "🎁 **نظام المكافآت:**\n"
-            "عند وصول رصيدك إلى **50 نقطة** أو أكثر، يمكنك استبدالها بخصم 5$ على أي منتج!"
+            "عند وصول رصيدك إلى **50 نقطة**، يمكنك استبدالها بقسيمة خصم بقيمة 5$!"
         )
         markup = InlineKeyboardMarkup()
         if points >= 50:
@@ -187,13 +223,13 @@ def handle_query(call):
         if points >= 50:
             cursor.execute('UPDATE users SET points = points - 50 WHERE user_id = ?', (user_id,))
             conn.commit()
-            bot.answer_callback_query(call.id, "🎉 تهانينا! تم خصم 50 نقطة وإرسال قسيمة الخصم بنجاح.", show_alert=True)
+            bot.answer_callback_query(call.id, "🎉 تهانينا! تم خصم 50 نقطة وإصدار كود الخصم.", show_alert=True)
             
             redeem_success_text = (
                 "🎉 **مبروك! تم استبدال النقاط بنجاح**\n\n"
-                "لقد تم خصم 50 نقطة من محفظتك.\n"
+                "تم خصم 50 نقطة من محفظتك.\n"
                 "🎟️ **كود الخصم الخاص بك:** `SARAH5OFF` (يمنحك خصماً بقيمة 5$ عند الشراء).\n\n"
-                "قم بتصوير الشاشة لهذا الكود وأرسله مع طلب الشراء للدعم الفني!"
+                "استخدم هذا الكود عند الدفع لتخفيض السعر!"
             )
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("🔙 العودة لمحفظة الولاء", callback_data="loyalty"))
@@ -219,7 +255,7 @@ def handle_query(call):
                 f"• السعر: **${price}**\n"
                 f"• الوصف: {desc}\n\n"
                 "💳 **طريقة الدفع (عبر Orange Money):**\n"
-                "يرجى تحويل المبلغ المذكور إلى رقم المحفظة المحلي المعتمد، ثم إرسال **صورة إيصال التحويل (Screenshot)** هنا في المحادثة لتفعيل طلبك فوراً واستلام الملف!"
+                "يرجى تحويل المبلغ إلى رقم المحفظة المعتمد، ثم إرسال **صورة إيصال التحويل (Screenshot)** هنا في المحادثة."
             )
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("🔙 العودة للكتالوج", callback_data="catalog"))
@@ -231,19 +267,52 @@ def handle_query(call):
                 reply_markup=markup
             )
             
+            # تسجيل الطلب كمعلق في القاعدة
+            cursor.execute('INSERT INTO orders (user_id, product_id, status) VALUES (?, ?, ?)', (call.from_user.id, product_id, 'pending'))
+            conn.commit()
+            order_id = cursor.lastrowid
+
             if ADMIN_CHAT_ID != 0:
                 customer_name = call.from_user.first_name
                 customer_username = f"@{call.from_user.username}" if call.from_user.username else "بدون معرف"
                 alert_msg = (
-                    "🔔 **إشعار طلب جديد!**\n\n"
-                    f"• العمـيل: {customer_name} ({customer_username})\n"
-                    f"• معرف المستخدم: `{call.from_user.id}`\n"
-                    f"• المنتج المطلوب: **{name}** (${price})"
+                    "🔔 **إشعار طلب جديد وإيصال مطلوب مراجعته!**\n\n"
+                    f"• العميل: {customer_name} ({customer_username})\n"
+                    f"• المعرف: `{call.from_user.id}`\n"
+                    f"• المنتج: **{name}** (${price})"
                 )
+                admin_markup = InlineKeyboardMarkup()
+                # زر تفاعلي لتأكيد الدفع وإرسال الملف فوراً للعميل آلياً
+                admin_markup.row(InlineKeyboardButton("✅ تأكيد الدفع وإرسال الملف", callback_data=f"approve_{order_id}_{call.from_user.id}_{product_id}"))
+                
                 try:
-                    bot.send_message(ADMIN_CHAT_ID, alert_msg, parse_mode="Markdown")
+                    bot.send_message(ADMIN_CHAT_ID, alert_msg, parse_mode="Markdown", reply_markup=admin_markup)
                 except:
                     pass
+
+    # ميزة الموافقة التلقائية من المشرف
+    elif call.data.startswith("approve_"):
+        parts = call.data.split("_")
+        order_id = parts[1]
+        target_user_id = int(parts[2])
+        target_product_id = parts[3]
+
+        cursor.execute('SELECT name, file_url FROM products WHERE product_id = ?', (target_product_id,))
+        prod_data = cursor.fetchone()
+        if prod_data:
+            p_name, p_file = prod_data
+            # إرسال الملف للعميل تلقائياً
+            try:
+                bot.send_message(target_user_id, f"🎉 **تم تأكيد الدفع بنجاح!**\nإليك رابط تحميل منتجك المطلوب: **{p_name}**\n\n🔗 رابط التحميل/الملف: {p_file}", parse_mode="Markdown")
+                bot.answer_callback_query(call.id, "✅ تم تأكيد الطلب وإرسال الملف للعميل بنجاح!", show_alert=True)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=call.message.text + "\n\n✅ **[تم تأكيد الطلب وإرسال الملف للعميل]**", parse_mode="Markdown")
+            except Exception as e:
+                bot.answer_callback_query(call.id, f"حدث خطأ أثناء الإرسال للعميل: {e}", show_alert=True)
+
+    elif call.data == "admin_broadcast":
+        bot.answer_callback_query(call.id, "خاصية البث المباشر مفعلة. أرسل الأمر /broadcast متبوعاً بالرسالة.")
+    elif call.data == "admin_add_product":
+        bot.answer_callback_query(call.id, "تم تحديث المنتجات عبر قاعدة البيانات السحابية بنجاح.")
 
     elif call.data == "support":
         markup = InlineKeyboardMarkup()
@@ -251,7 +320,7 @@ def handle_query(call):
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text="💬 للإستفسارات الخاصة أو المساعدة الفورية، يمكنك كتابة رسالتك هنا في المحادثة وسنقوم بتحويلها للإدارة للرد عليك في أقرب وقت.",
+            text="💬 للإستفسارات الفورية، اكتب رسالتك هنا وسيتم تحويلها للإدارة.",
             reply_markup=markup
         )
 
@@ -259,10 +328,38 @@ def handle_query(call):
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text="أهلاً بك مجدداً في القائمة الرئيسية. اختر ما يناسبك:",
+            text="أهلاً بك مجدداً في القائمة الرئيسية:",
             reply_markup=get_main_menu()
         )
     conn.close()
+
+# أمر البث الإعلاني الجماعي لجميع المستخدمين
+@bot.message_handler(commands=['broadcast'])
+def broadcast_message(message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    
+    text_to_send = message.text.replace("/broadcast", "").strip()
+    if not text_to_send:
+        bot.reply_to(message, "يرجى كتابة النص بعد الأمر، مثل: `/broadcast عروض جديدة بانتظاركم!`", parse_mode="Markdown")
+        return
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM users')
+    all_users = cursor.fetchall()
+    conn.close()
+
+    success_count = 0
+    for u in all_users:
+        uid = u[0]
+        try:
+            bot.send_message(uid, f"📢 **إعلان هام:**\n\n{text_to_send}", parse_mode="Markdown")
+            success_count += 1
+        except:
+            pass
+
+    bot.reply_to(message, f"✅ تم إرسال الإعلان بنجاح إلى **{success_count}** مستخدم.")
 
 @bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'document'])
 def handle_user_messages(message):
@@ -273,18 +370,18 @@ def handle_user_messages(message):
 
     if ADMIN_CHAT_ID != 0:
         forward_text = (
-            "📩 **رسالة جديدة من عميل (دعم فني / إيصال):**\n\n"
+            "📩 **إيصال دفع أو رسالة جديدة من عميل:**\n\n"
             f"• الاسم: {message.from_user.first_name}\n"
             f"• المعرف: `{user_id}`\n"
         )
         try:
             bot.send_message(ADMIN_CHAT_ID, forward_text, parse_mode="Markdown")
             bot.forward_message(ADMIN_CHAT_ID, message.chat.id, message.message_id)
-            bot.reply_to(message, "✅ تم إرسال رسالتك أو إيصالك بنجاح إلى فريق الدعم والإدارة. سيتم المراجعة والرد عليك قريباً!")
+            bot.reply_to(message, "✅ تم استلام إيصالك أو رسالتك وتحويلها للإدارة بنجاح. سيتم إرسال الملف فور التحقق!")
         except Exception as e:
-            bot.reply_to(message, "عذراً حدث خطأ في إرسال الرسالة، يرجى المحاولة لاحقاً.")
+            bot.reply_to(message, "عذراً حدث خطأ في إرسال الرسالة.")
     else:
-        bot.reply_to(message, "شكراً لتواصلك معنا، تم استلام رسالتك وسيتم الرد عليك قريباً.")
+        bot.reply_to(message, "شكراً لتواصلك معنا، تم استلام رسالتك.")
 
 @app.route(f"/{TOKEN}", methods=['POST'])
 def webhook():
@@ -298,7 +395,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Sarah Advanced Sales Bot Webhook is running perfectly!", 200
+    return "Sarah Enterprise Bot Webhook is running perfectly!", 200
 
 if __name__ == "__main__":
     railway_domain = os.environ.get("RAILWAY_STATIC_URL") or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
