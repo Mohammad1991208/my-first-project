@@ -5,8 +5,8 @@ from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# إعدادات البوت والاتصال بقاعدة البيانات
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+# وضع التوكن مباشرة هنا لتجنب مشاكل منصة Railway نهائياً
+TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXk12Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
@@ -193,7 +193,6 @@ def handle_query(call):
 def index():
     return "Sarah Sales Bot is running!", 200
 
-# تشغيل البوت عبر Thread مستقل ليعمل الـ Polling بالتوازي مع خادم الويب
 def run_bot():
     bot.remove_webhook()
     bot.infinity_polling()
@@ -203,6 +202,5 @@ if __name__ == "__main__":
     t.daemon = True
     t.start()
     
-    # تشغيل سيرفر الفلاسك لتررضي منصة Railway وتمنع الـ Crashed
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
