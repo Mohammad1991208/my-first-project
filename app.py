@@ -7,10 +7,14 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
+# ⚠️ ضع هنا معرف التيليجرام الخاص بك (Admin Telegram ID) لكي تصلك إشعارات المبيعات والدعم الفني عليه
+# يمكنك معرفة معرفك الرقمي عبر محادثة @userinfobot في تيليجرام
+ADMIN_CHAT_ID = 0  # استبدل الرقم 0 بمعرفك الحقيقي (مثلاً: 123456789)
+
 app = Flask(__name__)
 DB_NAME = "store.db"
 
-# تهيئة قاعدة البيانات والجداول مع كافة التطويرات
+# تهيئة قاعدة البيانات والجداول الشاملة
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -31,9 +35,7 @@ def init_db():
         )
     ''')
     
-    # تحديث الكتالوج بوضع المنتجات الحالية وإزالة الاستشارة
     cursor.execute("DELETE FROM products")
-    
     sample_products = [
         ("الكتاب الشامل في الذكاء الاصطناعي وتطبيقاته", 30.0, "مرجع عملاق وموسع يغطي مفاهيم الذكاء الاصطناعي، تقنيات التعلم العميق، وكيفية توظيفه عملياً في مشاريعك."),
         ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام اليومية."),
@@ -74,12 +76,17 @@ def send_welcome(message):
     user = cursor.fetchone()
 
     if not user:
-        initial_points = 10  # نقاط ترحيبية للمستخدم الجديد
+        initial_points = 10
         cursor.execute('INSERT INTO users (user_id, username, points, referred_by) VALUES (?, ?, ?, ?)',
                        (user_id, username, initial_points, referred_by))
         if referred_by:
-            # مكافأة لمن قام بالدعوة (+20 نقطة)
             cursor.execute('UPDATE users SET points = points + 20 WHERE user_id = ?', (referred_by,))
+            # إشعار الإدارة بوجود إحالة جديدة ناجحة
+            if ADMIN_CHAT_ID != 0:
+                try:
+                    bot.send_message(ADMIN_CHAT_ID, f"🔗 **إحالة جديدة ناجحة!**\nالمستخدم الجديد انضم عبر رابط المستخدم: `{referred_by}`", parse_mode="Markdown")
+                except:
+                    pass
         conn.commit()
     conn.close()
 
@@ -90,6 +97,30 @@ def send_welcome(message):
         "**كيف يمكنني خدمتك اليوم؟**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
+
+# لوحة تحكم المشرف عبر أمر /admin
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_CHAT_ID and ADMIN_CHAT_ID != 0:
+        bot.send_message(message.chat.id, "عذراً، هذا الأمر مخصص للمدير فقط.")
+        return
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_users = cursor.fetchone()[0]
+    cursor.execute('SELECT SUM(points) FROM users')
+    total_points = cursor.fetchone()[0] or 0
+    conn.close()
+
+    admin_text = (
+        "📊 **لوحة تحكم المشرف (Admin Panel)**\n\n"
+        f"• إجمالي عدد المستخدمين: **{total_users} مستخدم**\n"
+        f"• إجمالي نقاط الولاء الموزعة: **{total_points} نقطة**\n\n"
+        "البوت يعمل بنجاح ويستقبل العمليات بقرار تامة."
+    )
+    bot.send_message(message.chat.id, admin_text, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
@@ -118,7 +149,6 @@ def handle_query(call):
         result = cursor.fetchone()
         points = result[0] if result else 0
         
-        # حساب عدد الإحالات
         cursor.execute('SELECT COUNT(*) FROM users WHERE referred_by = ?', (user_id,))
         referral_count = cursor.fetchone()[0]
 
@@ -197,6 +227,21 @@ def handle_query(call):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
+            
+            # إرسال إشعار فوري للإدارة بأن عميلاً طلب منتجاً
+            if ADMIN_CHAT_ID != 0:
+                customer_name = call.from_user.first_name
+                customer_username = f"@{call.from_user.username}" if call.from_user.username else "بدون معرف"
+                alert_msg = (
+                    "🔔 **إشعار طلب جديد!**\n\n"
+                    f"• العمـيل: {customer_name} ({customer_username})\n"
+                    f"• معرف المستخدم: `{call.from_user.id}`\n"
+                    f"• المنتج المطلوب: **{name}** (${price})"
+                )
+                try:
+                    bot.send_message(ADMIN_CHAT_ID, alert_msg, parse_mode="Markdown")
+                except:
+                    pass
 
     elif call.data == "support":
         markup = InlineKeyboardMarkup()
@@ -204,7 +249,7 @@ def handle_query(call):
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text="💬 للإستفسارات الخاصة أو المساعدة الفورية، يمكنك كتابة رسالتك هنا وسنقوم بالرد عليك في أقرب وقت.",
+            text="💬 للإستفسارات الخاصة أو المساعدة الفورية، يمكنك كتابة رسالتك هنا في المحادثة وسنقوم بتحويلها للإدارة للرد عليك في أقرب وقت.",
             reply_markup=markup
         )
 
@@ -216,6 +261,30 @@ def handle_query(call):
             reply_markup=get_main_menu()
         )
     conn.close()
+
+# معالجة رسائل الدعم الفني وإيصالات الشفاء وإعادة توجيهها للإدارة
+@bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'document'])
+def handle_user_messages(message):
+    user_id = message.from_user.id
+    
+    # إذا كانت الرسالة مرسلة من المدير نفسه، فلا نعيد توجيهها
+    if user_id == ADMIN_CHAT_ID:
+        return
+
+    if ADMIN_CHAT_ID != 0:
+        forward_text = (
+            "📩 **رسالة جديدة من عميل (دعم فني / إيصال):**\n\n"
+            f"• الاسم: {message.from_user.first_name}\n"
+            f"• المعرف: `{user_id}`\n"
+        )
+        try:
+            bot.send_message(ADMIN_CHAT_ID, forward_text, parse_mode="Markdown")
+            bot.forward_message(ADMIN_CHAT_ID, message.chat.id, message.message_id)
+            bot.reply_to(message, "✅ تم إرسال رسالتك أو إيصالك بنجاح إلى فريق الدعم والإدارة. سيتم المراجعة والرد عليك قريباً!")
+        except Exception as e:
+            bot.reply_to(message, "عذراً حدث خطأ في إرسال الرسالة، يرجى المحاولة لاحقاً.")
+    else:
+        bot.reply_to(message, "شكراً لتواصلك معنا، تم استلام رسالتك وسيتم الرد عليك قريباً.")
 
 @app.route(f"/{TOKEN}", methods=['POST'])
 def webhook():
@@ -229,7 +298,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Sarah Sales Bot Webhook is running perfectly!", 200
+    return "Sarah Advanced Sales Bot Webhook is running perfectly!", 200
 
 if __name__ == "__main__":
     railway_domain = os.environ.get("RAILWAY_STATIC_URL") or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
