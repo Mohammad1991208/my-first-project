@@ -1,18 +1,16 @@
 import os
 import sqlite3
-import threading
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# التوكن الصحيح والمدمج مباشرة
 TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
 DB_NAME = "store.db"
 
-# تهيئة قاعدة البيانات وإنشاء الجداول إذا لم تكن موجودة
+# تهيئة قاعدة البيانات والجداول
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -40,7 +38,6 @@ def init_db():
             ("استشارة رقمية خاصة", 25.0, "جلسة استشارية وتوجيهية لتطوير مشروعك الرقمي.")
         ]
         cursor.executemany('INSERT INTO products (name, price, description) VALUES (?, ?, ?)', sample_products)
-    
     conn.commit()
     conn.close()
 
@@ -80,7 +77,6 @@ def send_welcome(message):
         if referred_by:
             cursor.execute('UPDATE users SET points = points + 20 WHERE user_id = ?', (referred_by,))
         conn.commit()
-
     conn.close()
 
     welcome_text = (
@@ -89,7 +85,6 @@ def send_welcome(message):
         "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الأدلة الرقمية، وقوالب أوامر الذكاء الاصطناعي، وأدوات أتمتة الأعمال التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
         "**كيف يمكنني خدمتك اليوم؟** يمكنك اختيار أحد الخيارات التالية من القائمة أدناه، أو مراسلتنا في أي وقت! 🚀"
     )
-    
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -100,14 +95,11 @@ def handle_query(call):
     if call.data == "catalog":
         cursor.execute('SELECT product_id, name, price, description FROM products')
         products = cursor.fetchall()
-        
         markup = InlineKeyboardMarkup()
         for prod in products:
             p_id, name, price, desc = prod
             markup.row(InlineKeyboardButton(f"📦 {name} (${price})", callback_data=f"buy_{p_id}"))
-        
         markup.row(InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"))
-        
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
@@ -131,10 +123,8 @@ def handle_query(call):
             f"🔗 **رابط الإحالة الخاص بك:**\n`{referral_link}`\n\n"
             "قم بمشاركة هذا الرابط مع أصدقائك، واكسب نقاطاً وعروضاً حصرية عند انضمامهم للمتجر!"
         )
-        
         markup = InlineKeyboardMarkup()
         markup.row(InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"))
-        
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
@@ -147,7 +137,6 @@ def handle_query(call):
         product_id = call.data.split("_")[1]
         cursor.execute('SELECT name, price, description FROM products WHERE product_id = ?', (product_id,))
         prod = cursor.fetchone()
-        
         if prod:
             name, price, desc = prod
             purchase_text = (
@@ -160,7 +149,6 @@ def handle_query(call):
             )
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("🔙 العودة للكتالوج", callback_data="catalog"))
-            
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
@@ -186,21 +174,30 @@ def handle_query(call):
             text="أهلاً بك مجدداً في القائمة الرئيسية. اختر ما يناسبك:",
             reply_markup=get_main_menu()
         )
-
     conn.close()
+
+# مسار استقبال الرسائل عبر Webhook تلقائياً من تيليجرام
+@app.route(f"/{TOKEN}", methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "!", 200
+    else:
+        return "Internal Server Error", 403
 
 @app.route("/")
 def index():
-    return "Sarah Sales Bot is running!", 200
-
-def run_bot():
-    bot.remove_webhook()
-    bot.infinity_polling()
+    return "Sarah Sales Bot Webhook is running!", 200
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_bot)
-    t.daemon = True
-    t.start()
-    
+    # ربط الويب هوك تلقائياً برابط مشروعك على Railway عند التشغيل
+    railway_domain = os.environ.get("RAILWAY_STATIC_URL") or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+    if railway_domain:
+        webhook_url = f"https://{railway_domain}/{TOKEN}"
+        bot.remove_webhook()
+        bot.set_webhook(url=webhook_url)
+
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
