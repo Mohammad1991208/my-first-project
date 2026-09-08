@@ -10,7 +10,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 DB_NAME = "store.db"
 
-# تهيئة قاعدة البيانات والجداول (تمت إضافة الكتاب الأكبر في الذكاء الاصطناعي)
+# تهيئة قاعدة البيانات والجداول مع كافة التطويرات
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -31,7 +31,7 @@ def init_db():
         )
     ''')
     
-    # تحديث الكتالوج وإزالة المنتجات القديمة لضمان ظهور الكتاب الجديد
+    # تحديث الكتالوج بوضع المنتجات الحالية وإزالة الاستشارة
     cursor.execute("DELETE FROM products")
     
     sample_products = [
@@ -74,10 +74,11 @@ def send_welcome(message):
     user = cursor.fetchone()
 
     if not user:
-        initial_points = 10
+        initial_points = 10  # نقاط ترحيبية للمستخدم الجديد
         cursor.execute('INSERT INTO users (user_id, username, points, referred_by) VALUES (?, ?, ?, ?)',
                        (user_id, username, initial_points, referred_by))
         if referred_by:
+            # مكافأة لمن قام بالدعوة (+20 نقطة)
             cursor.execute('UPDATE users SET points = points + 20 WHERE user_id = ?', (referred_by,))
         conn.commit()
     conn.close()
@@ -85,8 +86,8 @@ def send_welcome(message):
     welcome_text = (
         "أهلاً بك! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
-        "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الكتب والأدلة الرقمية وقوالب أوامر الذكاء الاصطناعي التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
-        "**كيف يمكنني خدمتك اليوم؟** يمكنك اختيار أحد الخيارات التالية من القائمة أدناه، أو مراسلتنا في أي وقت! 🚀"
+        "حصلت على **10 نقاط هدية** عند انضمامك للمتجر! يمكنك تصفح الكتب وقوالب الذكاء الاصطناعي أو دعوت أصدقائك لمضاعفة نقاطك.\n\n"
+        "**كيف يمكنني خدمتك اليوم؟**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
 
@@ -117,17 +118,26 @@ def handle_query(call):
         result = cursor.fetchone()
         points = result[0] if result else 0
         
+        # حساب عدد الإحالات
+        cursor.execute('SELECT COUNT(*) FROM users WHERE referred_by = ?', (user_id,))
+        referral_count = cursor.fetchone()[0]
+
         bot_username = bot.get_me().username
         referral_link = f"https://t.me/{bot_username}?start={user_id}"
 
         loyalty_text = (
-            f"⭐ **محفظة الولاء الخاصة بك**\n\n"
-            f"• رصيد النقاط الحالي: **{points} نقطة**\n\n"
+            f"⭐ **محفظة الولاء والإحالات الخاصة بك**\n\n"
+            f"• رصيد النقاط الحالي: **{points} نقطة**\n"
+            f"• عدد الأشخاص الذين دعيتهم: **{referral_count} شخص** (كل إحالة تمنحك +20 نقطة!)\n\n"
             f"🔗 **رابط الإحالة الخاص بك:**\n`{referral_link}`\n\n"
-            "قم بمشاركة هذا الرابط مع أصدقائك، واكسب نقاطاً وعروضاً حصرية عند انضمامهم للمتجر!"
+            "🎁 **نظام المكافآت:**\n"
+            "عند وصول رصيدك إلى **50 نقطة** أو أكثر، يمكنك استبدالها بخصم 5$ على أي منتج!"
         )
         markup = InlineKeyboardMarkup()
+        if points >= 50:
+            markup.row(InlineKeyboardButton("🎁 استبدال 50 نقطة بخصم 5$", callback_data="redeem_points"))
         markup.row(InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"))
+        
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
@@ -135,6 +145,34 @@ def handle_query(call):
             parse_mode="Markdown",
             reply_markup=markup
         )
+
+    elif call.data == "redeem_points":
+        user_id = call.from_user.id
+        cursor.execute('SELECT points FROM users WHERE user_id = ?', (user_id,))
+        points = cursor.fetchone()[0]
+        
+        if points >= 50:
+            cursor.execute('UPDATE users SET points = points - 50 WHERE user_id = ?', (user_id,))
+            conn.commit()
+            bot.answer_callback_query(call.id, "🎉 تهانينا! تم خصم 50 نقطة وإرسال قسيمة الخصم بنجاح.", show_alert=True)
+            
+            redeem_success_text = (
+                "🎉 **مبروك! تم استبدال النقاط بنجاح**\n\n"
+                "لقد تم خصم 50 نقطة من محفظتك.\n"
+                "🎟️ **كود الخصم الخاص بك:** `SARAH5OFF` (يمنحك خصماً بقيمة 5$ عند الشراء).\n\n"
+                "قم بتصوير الشاشة لهذا الكود وأرسله مع طلب الشراء للدعم الفني!"
+            )
+            markup = InlineKeyboardMarkup()
+            markup.row(InlineKeyboardButton("🔙 العودة لمحفظة الولاء", callback_data="loyalty"))
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=redeem_success_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+        else:
+            bot.answer_callback_query(call.id, "عذراً، رصيدك أقل من 50 نقطة.", show_alert=True)
 
     elif call.data.startswith("buy_"):
         product_id = call.data.split("_")[1]
@@ -191,7 +229,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Sarah Sales Bot Webhook is running!", 200
+    return "Sarah Sales Bot Webhook is running perfectly!", 200
 
 if __name__ == "__main__":
     railway_domain = os.environ.get("RAILWAY_STATIC_URL") or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
