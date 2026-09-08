@@ -10,7 +10,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 DB_NAME = "store.db"
 
-# تهيئة قاعدة البيانات والجداول (تمت إزالة الاستشارة وتحديث المنتجات)
+# تهيئة قاعدة البيانات والجداول (تمت إضافة الكتاب الأكبر في الذكاء الاصطناعي)
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -31,16 +31,16 @@ def init_db():
         )
     ''')
     
-    # حذف الاستشارة الرقمية القديمة من قاعدة البيانات إن وجدت
-    cursor.execute("DELETE FROM products WHERE name LIKE '%استشارة%'")
+    # تحديث الكتالوج وإزالة المنتجات القديمة لضمان ظهور الكتاب الجديد
+    cursor.execute("DELETE FROM products")
     
-    cursor.execute('SELECT COUNT(*) FROM products')
-    if cursor.fetchone()[0] == 0:
-        sample_products = [
-            ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام اليومية."),
-            ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر للذكاء الاصطناعي.")
-        ]
-        cursor.executemany('INSERT INTO products (name, price, description) VALUES (?, ?, ?)', sample_products)
+    sample_products = [
+        ("الكتاب الشامل في الذكاء الاصطناعي وتطبيقاته", 30.0, "مرجع عملاق وموسع يغطي مفاهيم الذكاء الاصطناعي، تقنيات التعلم العميق، وكيفية توظيفه عملياً في مشاريعك."),
+        ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام اليومية."),
+        ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر للذكاء الاصطناعي.")
+    ]
+    cursor.executemany('INSERT INTO products (name, price, description) VALUES (?, ?, ?)', sample_products)
+    
     conn.commit()
     conn.close()
 
@@ -85,7 +85,7 @@ def send_welcome(message):
     welcome_text = (
         "أهلاً بك! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
-        "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الأدلة الرقمية وقوالب أوامر الذكاء الاصطناعي التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
+        "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الكتب والأدلة الرقمية وقوالب أوامر الذكاء الاصطناعي التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
         "**كيف يمكنني خدمتك اليوم؟** يمكنك اختيار أحد الخيارات التالية من القائمة أدناه، أو مراسلتنا في أي وقت! 🚀"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
