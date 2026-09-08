@@ -10,7 +10,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 DB_NAME = "store.db"
 
-# تهيئة قاعدة البيانات والجداول
+# تهيئة قاعدة البيانات والجداول (تمت إزالة الاستشارة وتحديث المنتجات)
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -30,12 +30,15 @@ def init_db():
             description TEXT
         )
     ''')
+    
+    # حذف الاستشارة الرقمية القديمة من قاعدة البيانات إن وجدت
+    cursor.execute("DELETE FROM products WHERE name LIKE '%استشارة%'")
+    
     cursor.execute('SELECT COUNT(*) FROM products')
     if cursor.fetchone()[0] == 0:
         sample_products = [
             ("دليل أتمتة الأعمال الشامل", 15.0, "دليل عملي لاختصار الوقت وأتمتة المهام اليومية."),
-            ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر للذكاء الاصطناعي."),
-            ("استشارة رقمية خاصة", 25.0, "جلسة استشارية وتوجيهية لتطوير مشروعك الرقمي.")
+            ("قوالب الأوامر المتقدمة (Prompt Pack)", 10.0, "أكثر من 100 أمر جاهز ومختبر للذكاء الاصطناعي.")
         ]
         cursor.executemany('INSERT INTO products (name, price, description) VALUES (?, ?, ?)', sample_products)
     conn.commit()
@@ -82,7 +85,7 @@ def send_welcome(message):
     welcome_text = (
         "أهلاً بك! 🌟\n\n"
         "أنا **سارة**، وكيلتك الرقمية للمبيعات وتطوير الأعمال.\n"
-        "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الأدلة الرقمية، وقوالب أوامر الذكاء الاصطناعي، وأدوات أتمتة الأعمال التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
+        "سعيد بوجودك هنا! أساعدك في الوصول إلى أقوى الأدلة الرقمية وقوالب أوامر الذكاء الاصطناعي التي توفر عليك وقتاً وجهداً كبيراً.\n\n"
         "**كيف يمكنني خدمتك اليوم؟** يمكنك اختيار أحد الخيارات التالية من القائمة أدناه، أو مراسلتنا في أي وقت! 🚀"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
@@ -176,7 +179,6 @@ def handle_query(call):
         )
     conn.close()
 
-# مسار استقبال الرسائل عبر Webhook تلقائياً من تيليجرام
 @app.route(f"/{TOKEN}", methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -192,7 +194,6 @@ def index():
     return "Sarah Sales Bot Webhook is running!", 200
 
 if __name__ == "__main__":
-    # ربط الويب هوك تلقائياً برابط مشروعك على Railway عند التشغيل
     railway_domain = os.environ.get("RAILWAY_STATIC_URL") or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
     if railway_domain:
         webhook_url = f"https://{railway_domain}/{TOKEN}"
