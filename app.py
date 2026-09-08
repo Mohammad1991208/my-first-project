@@ -7,8 +7,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
-# ⚠️ ضع هنا معرف التيليجرام الخاص بك (Admin Telegram ID) بعد معرفته عبر أمر /myid
-ADMIN_CHAT_ID = 0  # استبدل الرقم 0 بمعرفك الحقيقي (مثلاً: 123456789)
+# تم تعيين معرف التيليجرام الخاص بك (Admin ID) بنجاح
+ADMIN_CHAT_ID = 6000524951
 
 app = Flask(__name__)
 DB_NAME = "store.db"
@@ -96,10 +96,10 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
 
-# أمر معرفة الـ ID الخاص بك بسهولة
+# أمر معرفة الـ ID الخاص بك
 @bot.message_handler(commands=['myid'])
 def show_my_id(message):
-    bot.reply_to(message, f"معرفك الشخصي (Admin ID) هو:\n`{message.from_user.id}`\n\nقم بنسخه وضعه في متغير ADMIN_CHAT_ID في الكود.", parse_mode="Markdown")
+    bot.reply_to(message, f"معرفك الشخصي (Admin ID) هو:\n`{message.from_user.id}`", parse_mode="Markdown")
 
 # لوحة تحكم المشرف عبر أمر /admin
 @bot.message_handler(commands=['admin'])
