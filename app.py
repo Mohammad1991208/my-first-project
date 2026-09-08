@@ -7,8 +7,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
-# ⚠️ ضع هنا معرف التيليجرام الخاص بك (Admin Telegram ID) لكي تصلك إشعارات المبيعات والدعم الفني عليه
-# يمكنك معرفة معرفك الرقمي عبر محادثة @userinfobot في تيليجرام
+# ⚠️ ضع هنا معرف التيليجرام الخاص بك (Admin Telegram ID) بعد معرفته عبر أمر /myid
 ADMIN_CHAT_ID = 0  # استبدل الرقم 0 بمعرفك الحقيقي (مثلاً: 123456789)
 
 app = Flask(__name__)
@@ -81,7 +80,6 @@ def send_welcome(message):
                        (user_id, username, initial_points, referred_by))
         if referred_by:
             cursor.execute('UPDATE users SET points = points + 20 WHERE user_id = ?', (referred_by,))
-            # إشعار الإدارة بوجود إحالة جديدة ناجحة
             if ADMIN_CHAT_ID != 0:
                 try:
                     bot.send_message(ADMIN_CHAT_ID, f"🔗 **إحالة جديدة ناجحة!**\nالمستخدم الجديد انضم عبر رابط المستخدم: `{referred_by}`", parse_mode="Markdown")
@@ -97,6 +95,11 @@ def send_welcome(message):
         "**كيف يمكنني خدمتك اليوم؟**"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=get_main_menu())
+
+# أمر معرفة الـ ID الخاص بك بسهولة
+@bot.message_handler(commands=['myid'])
+def show_my_id(message):
+    bot.reply_to(message, f"معرفك الشخصي (Admin ID) هو:\n`{message.from_user.id}`\n\nقم بنسخه وضعه في متغير ADMIN_CHAT_ID في الكود.", parse_mode="Markdown")
 
 # لوحة تحكم المشرف عبر أمر /admin
 @bot.message_handler(commands=['admin'])
@@ -118,7 +121,7 @@ def admin_panel(message):
         "📊 **لوحة تحكم المشرف (Admin Panel)**\n\n"
         f"• إجمالي عدد المستخدمين: **{total_users} مستخدم**\n"
         f"• إجمالي نقاط الولاء الموزعة: **{total_points} نقطة**\n\n"
-        "البوت يعمل بنجاح ويستقبل العمليات بقرار تامة."
+        "البوت يعمل بنجاح ويستقبل العمليات بكفاءة تامة."
     )
     bot.send_message(message.chat.id, admin_text, parse_mode="Markdown")
 
@@ -228,7 +231,6 @@ def handle_query(call):
                 reply_markup=markup
             )
             
-            # إرسال إشعار فوري للإدارة بأن عميلاً طلب منتجاً
             if ADMIN_CHAT_ID != 0:
                 customer_name = call.from_user.first_name
                 customer_username = f"@{call.from_user.username}" if call.from_user.username else "بدون معرف"
@@ -262,12 +264,10 @@ def handle_query(call):
         )
     conn.close()
 
-# معالجة رسائل الدعم الفني وإيصالات الشفاء وإعادة توجيهها للإدارة
 @bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'document'])
 def handle_user_messages(message):
     user_id = message.from_user.id
     
-    # إذا كانت الرسالة مرسلة من المدير نفسه، فلا نعيد توجيهها
     if user_id == ADMIN_CHAT_ID:
         return
 
