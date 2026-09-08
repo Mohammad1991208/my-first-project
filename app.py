@@ -5,8 +5,8 @@ from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# وضع التوكن مباشرة هنا لتجنب مشاكل منصة Railway نهائياً
-TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXk12Q7Q"
+# التوكن الصحيح والمدمج مباشرة
+TOKEN = "8624856174:AAF8w8nF2GxHKTK5qiN8jUyDN1CPXkl2Q7Q"
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
